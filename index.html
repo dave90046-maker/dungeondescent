@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Dungeon Descent</title>
+  <style>
+    /* ── Global reset & retro terminal look ── */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #000;
+      color: #00ff00;
+      font-family: "Courier New", Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 8px;
+      /* Prevent tap-hold context menu on mobile */
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      text-shadow: 0 0 8px #00ff00;
+    }
+
+    /* ── The 3-D view canvas ── */
+    #view {
+      border: 2px solid #00ff00;
+      box-shadow: 0 0 12px #00ff00;
+      display: block;
+      /* Canvas is square; we'll size it with JS */
+      image-rendering: pixelated;
+    }
+
+    /* ── Status bar below the canvas ── */
+    #status {
+      margin-top: 6px;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+    }
+
+    /* ── D-pad control grid ── */
+    /*
+     * Layout:
+     *   [  ] [FWD] [  ]
+     *   [LT] [  ] [RT]
+     *   [  ] [BCK] [  ]
+     */
+    #controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 10px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .btn {
+      background: #000;
+      color: #00ff00;
+      border: 2px solid #00ff00;
+      font-family: inherit;
+      font-size: 1.2rem;
+      padding: 16px 0;
+      cursor: pointer;
+      text-align: center;
+      border-radius: 4px;
+      box-shadow: 0 0 6px #00ff00;
+      /* Prevent double-tap zoom on mobile */
+      touch-action: manipulation;
+      transition: background 0.08s;
+    }
+
+    .btn:active,
+    .btn.pressed {
+      background: #003300;
+    }
+
+    /* Empty cells in the grid — invisible spacer */
+    .btn-empty {
+      visibility: hidden;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Dungeon Descent</h1>
+
+  <!-- The 3-D wireframe view is drawn here -->
+  <canvas id="view"></canvas>
+
+  <!-- Coordinates and facing direction -->
+  <div id="status">X:0 Y:0 FACING:NORTH</div>
+
+  <!-- On-screen D-pad -->
+  <div id="controls">
+    <div class="btn btn-empty"></div>
+    <button class="btn" id="btn-fwd"  aria-label="Forward">&#9650;</button>
+    <div class="btn btn-empty"></div>
+
+    <button class="btn" id="btn-lt"   aria-label="Turn Left">&#9668;</button>
+    <div class="btn btn-empty"></div>
+    <button class="btn" id="btn-rt"   aria-label="Turn Right">&#9658;</button>
+
+    <div class="btn btn-empty"></div>
+    <button class="btn" id="btn-back" aria-label="Back">&#9660;</button>
+    <div class="btn btn-empty"></div>
+  </div>
+
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════
+   DUNGEON MAP
+   ════════════════════════════════════════════════════════════
+   A 10×10 grid.  1 = solid wall, 0 = open passage.
+   Row 0 is the NORTH edge, row 9 is the SOUTH edge.
+   Col 0 is the WEST edge,  col 9 is the EAST edge.
+
+   You can edit this array directly to redesign the dungeon.
+   The outer border is all 1s so the player can't walk off the edge.
+*/
+const MAP = [
+  [1,1,1,1,1,1,1,1,1,1],  // row 0  (north wall)
+  [1,0,0,0,1,0,0,0,0,1],  // row 1
+  [1,0,1,0,1,0,1,1,0,1],  // row 2
+  [1,0,1,0,0,0,0,1,0,1],  // row 3
+  [1,0,1,1,1,1,0,1,0,1],  // row 4
+  [1,0,0,0,0,1,0,0,0,1],  // row 5
+  [1,1,1,0,1,1,1,1,0,1],  // row 6
+  [1,0,0,0,0,0,0,1,0,1],  // row 7
+  [1,0,1,1,1,1,0,0,0,1],  // row 8
+  [1,1,1,1,1,1,1,1,1,1],  // row 9  (south wall)
+];
+
+/* MAP dimensions */
+const MAP_ROWS = MAP.length;        // 10
+const MAP_COLS = MAP[0].length;     // 10
+
+/* ════════════════════════════════════════════════════════════
+   PLAYER STATE
+   ════════════════════════════════════════════════════════════
+   x, y  — tile coordinates (integers).
+   dir   — index into DIRECTIONS[] below (0=N, 1=E, 2=S, 3=W).
+*/
+const player = { x: 1, y: 1, dir: 0 };
+
+/* Cardinal direction metadata.
+   dx / dy describe the unit step when moving in that direction.
+   Note: y increases downward (south) in our grid.          */
+const DIRECTIONS = [
+  { name: "NORTH", dx:  0, dy: -1 },
+  { name: "EAST",  dx:  1, dy:  0 },
+  { name: "SOUTH", dx:  0, dy:  1 },
+  { name: "WEST",  dx: -1, dy:  0 },
+];
+
+/* ════════════════════════════════════════════════════════════
+   CANVAS SETUP
+   ════════════════════════════════════════════════════════════
+   We size the canvas to fill the viewport width (up to 480 px)
+   while keeping it square.
+*/
+const canvas = document.getElementById("view");
+const ctx    = canvas.getContext("2d");
+
+function resizeCanvas() {
+  const size = Math.min(window.innerWidth - 16, 480);
+  canvas.width  = size;
+  canvas.height = size;
+  render();   // redraw immediately after resize
+}
+
+/* ════════════════════════════════════════════════════════════
+   PERSPECTIVE RENDERER
+   ════════════════════════════════════════════════════════════
+   This is a "fake 3-D" approach like early Wizardry / Bard's Tale:
+   - We look ahead a fixed number of tiles (VIEW_DEPTH).
+   - For each depth slice we draw a rectangular "tunnel frame"
+     that gets smaller as depth increases, giving a corridor illusion.
+   - We then check whether there is a wall to the LEFT, RIGHT, or
+     FRONT of each slice and draw the appropriate wall polygon.
+
+   Coordinate conventions inside the renderer:
+     cx, cy  — canvas centre
+     The "screen rectangle" at each depth is derived by scaling a
+     half-width (hw) and half-height (hh) by a perspective factor.
+*/
+
+const VIEW_DEPTH = 5;   // how many tiles ahead we draw
+
+/* Perspective scale for each depth step.
+   At depth 0 (the tile the player stands in) scale = 1.0 (full canvas).
+   Each step further away multiplies by PERSP_SCALE, making it smaller. */
+const PERSP_SCALE = 0.55;
+
+/* Precompute the screen rectangles for each depth 0..VIEW_DEPTH.
+   rect[d] = { x1, y1, x2, y2 } corners of the "frame" at depth d.
+   We recalculate these when the canvas is resized.             */
+let depthRects = [];
+
+function buildDepthRects() {
+  depthRects = [];
+  const S = canvas.width;          // canvas is square, S×S
+  const cx = S / 2;
+  const cy = S / 2;
+  const maxHalf = S / 2;           // half-size at depth 0 (edges of canvas)
+
+  for (let d = 0; d <= VIEW_DEPTH; d++) {
+    /* scale shrinks with depth: 0.55^d */
+    const scale = Math.pow(PERSP_SCALE, d);
+    const hw = maxHalf * scale;    // half-width
+    const hh = maxHalf * scale;    // half-height (square canvas → same)
+    depthRects.push({
+      x1: cx - hw,  y1: cy - hh,  // top-left
+      x2: cx + hw,  y2: cy + hh,  // bottom-right
+    });
+  }
+}
+
+/* ── Helper: is a map cell a wall? ── */
+function isWall(col, row) {
+  /* Out-of-bounds counts as a wall so we never walk off the map */
+  if (row < 0 || row >= MAP_ROWS || col < 0 || col >= MAP_COLS) return true;
+  return MAP[row][col] === 1;
+}
+
+/* ── Helper: fill a quadrilateral with 4 corner points ──
+   Points are { x, y } objects in canvas space.            */
+function fillQuad(p0, p1, p2, p3) {
+  ctx.beginPath();
+  ctx.moveTo(p0.x, p0.y);
+  ctx.lineTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.lineTo(p3.x, p3.y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+/* ── Main render function ── */
+function render() {
+  buildDepthRects();   // recalc if canvas was resized
+
+  const S = canvas.width;
+
+  /* Clear to black */
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, S, S);
+
+  /* All lines and fills use phosphor green */
+  ctx.strokeStyle = "#00ff00";
+  ctx.fillStyle   = "#000000";   // walls are hollow (black fill, green outline)
+  ctx.lineWidth   = 1.5;
+
+  /* Direction vectors:
+     forward (fd) — the direction the player faces
+     right   (rd) — 90° clockwise from forward
+  */
+  const fd = DIRECTIONS[player.dir];
+  const rd = DIRECTIONS[(player.dir + 1) % 4];   // right = dir+1 mod 4
+
+  /* Walk forward from the player's position and draw each depth slice.
+     We draw from FAR to NEAR so closer walls paint over farther ones. */
+  for (let d = VIEW_DEPTH - 1; d >= 0; d--) {
+    /* Map tile at this depth along the forward axis */
+    const tx = player.x + fd.dx * d;
+    const ty = player.y + fd.dy * d;
+
+    /* Screen rectangles at this depth and one step closer */
+    const far  = depthRects[d + 1];   // smaller rect (further away)
+    const near = depthRects[d];       // larger rect  (closer)
+
+    /* ── FRONT WALL ──
+       Draw it if the tile ONE step further ahead is a wall.        */
+    const frontX = tx + fd.dx;
+    const frontY = ty + fd.dy;
+    if (isWall(frontX, frontY)) {
+      /* The front wall fills the far rectangle */
+      ctx.fillStyle = "#001a00";   // very dark green tint for depth
+      ctx.strokeStyle = "#00ff00";
+      ctx.beginPath();
+      ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    /* ── LEFT WALL ──
+       The tile to the LEFT of the current forward tile.
+       "left" is the direction OPPOSITE to right.                   */
+    const leftX = tx - rd.dx;
+    const leftY = ty - rd.dy;
+    if (isWall(leftX, leftY)) {
+      /* Draw a trapezoid connecting the left edges of near and far rects */
+      ctx.fillStyle = "#001400";
+      ctx.strokeStyle = "#00ff00";
+      fillQuad(
+        { x: near.x1, y: near.y1 },   // near top-left
+        { x: far.x1,  y: far.y1  },   // far  top-left
+        { x: far.x1,  y: far.y2  },   // far  bottom-left
+        { x: near.x1, y: near.y2 }    // near bottom-left
+      );
+    }
+
+    /* ── RIGHT WALL ── */
+    if (isWall(tx + rd.dx, ty + rd.dy)) {
+      ctx.fillStyle = "#001400";
+      ctx.strokeStyle = "#00ff00";
+      fillQuad(
+        { x: near.x2, y: near.y1 },   // near top-right
+        { x: far.x2,  y: far.y1  },   // far  top-right
+        { x: far.x2,  y: far.y2  },   // far  bottom-right
+        { x: near.x2, y: near.y2 }    // near bottom-right
+      );
+    }
+
+    /* ── CORRIDOR FRAME LINES ──
+       Draw the 4 lines connecting near rect corners to far rect corners.
+       These give the receding-corridor "tunnel" effect.             */
+    ctx.strokeStyle = "#00ff00";
+    ctx.beginPath();
+    // Top-left edge
+    ctx.moveTo(near.x1, near.y1); ctx.lineTo(far.x1, far.y1);
+    // Top-right edge
+    ctx.moveTo(near.x2, near.y1); ctx.lineTo(far.x2, far.y1);
+    // Bottom-left edge
+    ctx.moveTo(near.x1, near.y2); ctx.lineTo(far.x1, far.y2);
+    // Bottom-right edge
+    ctx.moveTo(near.x2, near.y2); ctx.lineTo(far.x2, far.y2);
+    ctx.stroke();
+
+    /* Draw the far rectangle outline (the "end" of this corridor slice) */
+    ctx.beginPath();
+    ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
+    ctx.stroke();
+  }
+
+  /* Draw the near (innermost) rectangle — the immediate surroundings */
+  const near0 = depthRects[0];
+  ctx.strokeStyle = "#00ff00";
+  ctx.beginPath();
+  ctx.rect(near0.x1, near0.y1, near0.x2 - near0.x1, near0.y2 - near0.y1);
+  ctx.stroke();
+
+  /* Update the status text */
+  updateStatus();
+}
+
+/* ════════════════════════════════════════════════════════════
+   STATUS BAR
+   ════════════════════════════════════════════════════════════ */
+function updateStatus() {
+  const dir  = DIRECTIONS[player.dir];
+  document.getElementById("status").textContent =
+    `X:${player.x}  Y:${player.y}  FACING:${dir.name}`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   MOVEMENT
+   ════════════════════════════════════════════════════════════ */
+
+/* Move the player forward or backward along their facing axis.
+   step =  1 → forward,  -1 → backward                        */
+function moveForward(step) {
+  const fd = DIRECTIONS[player.dir];
+  const nx = player.x + fd.dx * step;
+  const ny = player.y + fd.dy * step;
+  if (!isWall(nx, ny)) {
+    player.x = nx;
+    player.y = ny;
+    render();
+  }
+}
+
+/* Rotate the player left or right.
+   delta = -1 → left (counter-clockwise),  +1 → right (clockwise) */
+function rotate(delta) {
+  /* Add delta, wrap around 0-3 */
+  player.dir = (player.dir + 4 + delta) % 4;
+  render();
+}
+
+/* ════════════════════════════════════════════════════════════
+   INPUT — ON-SCREEN BUTTONS
+   ════════════════════════════════════════════════════════════
+   We use both "click" (desktop) and "touchstart" (mobile) so
+   there is no 300ms tap delay on phones.
+*/
+
+function addButtonHandler(id, action) {
+  const btn = document.getElementById(id);
+
+  /* Desktop click */
+  btn.addEventListener("click", action);
+
+  /* Mobile touch — preventDefault stops the "ghost click" that
+     browsers fire ~300ms after touchstart to maintain compatibility */
+  btn.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    action();
+    btn.classList.add("pressed");
+  }, { passive: false });
+
+  btn.addEventListener("touchend", () => {
+    btn.classList.remove("pressed");
+  });
+}
+
+addButtonHandler("btn-fwd",  () => moveForward(1));
+addButtonHandler("btn-back", () => moveForward(-1));
+addButtonHandler("btn-lt",   () => rotate(-1));
+addButtonHandler("btn-rt",   () => rotate(1));
+
+/* ════════════════════════════════════════════════════════════
+   INPUT — KEYBOARD (DESKTOP / TESTING)
+   ════════════════════════════════════════════════════════════ */
+document.addEventListener("keydown", (e) => {
+  switch (e.key) {
+    case "ArrowUp":    moveForward(1);  e.preventDefault(); break;
+    case "ArrowDown":  moveForward(-1); e.preventDefault(); break;
+    case "ArrowLeft":  rotate(-1);      e.preventDefault(); break;
+    case "ArrowRight": rotate(1);       e.preventDefault(); break;
+  }
+});
+
+/* ════════════════════════════════════════════════════════════
+   STARTUP
+   ════════════════════════════════════════════════════════════ */
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();   // sets canvas size and calls render() for the first time
+</script>
+</body>
+</html>
