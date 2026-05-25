@@ -92,6 +92,20 @@
     .btn-empty {
       visibility: hidden;
     }
+
+    /* ── Stair button — shown only when standing on a staircase ── */
+    #stair-wrap {
+      display: none;           /* hidden by default; JS shows it */
+      width: 100%;
+      max-width: 320px;
+      margin-top: 6px;
+    }
+
+    #btn-stairs {
+      width: 100%;
+      font-size: 1rem;
+      letter-spacing: 0.15em;
+    }
   </style>
 </head>
 <body>
@@ -101,8 +115,8 @@
   <!-- The 3-D wireframe view is drawn here -->
   <canvas id="view"></canvas>
 
-  <!-- Coordinates and facing direction -->
-  <div id="status">X:0 Y:0 FACING:NORTH</div>
+  <!-- Level, coordinates and facing direction -->
+  <div id="status">LEVEL 1  X:0 Y:0  FACING:NORTH</div>
 
   <!-- On-screen D-pad -->
   <div id="controls">
@@ -119,43 +133,151 @@
     <div class="btn btn-empty"></div>
   </div>
 
+  <!-- Stair button — text and visibility controlled by JS -->
+  <div id="stair-wrap">
+    <button class="btn" id="btn-stairs" aria-label="Use Stairs">DESCEND &#9660;</button>
+  </div>
+
 <script>
 "use strict";
 
 /* ════════════════════════════════════════════════════════════
-   DUNGEON MAP
+   TILE CONSTANTS
    ════════════════════════════════════════════════════════════
-   A 10×10 grid.  1 = solid wall, 0 = open passage.
-   Row 0 is the NORTH edge, row 9 is the SOUTH edge.
-   Col 0 is the WEST edge,  col 9 is the EAST edge.
+   These are the values you write into the map grid arrays.
+   Using named constants instead of bare numbers makes the
+   map arrays much easier to read when you design levels.
 
-   You can edit this array directly to redesign the dungeon.
-   The outer border is all 1s so the player can't walk off the edge.
+     0  TILE_FLOOR      — open, walkable passage
+     1  TILE_WALL       — solid stone, blocks movement and view
+     2  TILE_STAIR_DOWN — staircase going DEEPER (to the next level)
+     3  TILE_STAIR_UP   — staircase going UP    (to the previous level)
+
+   To place stairs in a level, simply put a 2 or 3 in the grid.
 */
-const MAP = [
-  [1,1,1,1,1,1,1,1,1,1],  // row 0  (north wall)
-  [1,0,0,0,1,0,0,0,0,1],  // row 1
-  [1,0,1,0,1,0,1,1,0,1],  // row 2
-  [1,0,1,0,0,0,0,1,0,1],  // row 3
-  [1,0,1,1,1,1,0,1,0,1],  // row 4
-  [1,0,0,0,0,1,0,0,0,1],  // row 5
-  [1,1,1,0,1,1,1,1,0,1],  // row 6
-  [1,0,0,0,0,0,0,1,0,1],  // row 7
-  [1,0,1,1,1,1,0,0,0,1],  // row 8
-  [1,1,1,1,1,1,1,1,1,1],  // row 9  (south wall)
-];
+const TILE_FLOOR      = 0;
+const TILE_WALL       = 1;
+const TILE_STAIR_DOWN = 2;
+const TILE_STAIR_UP   = 3;
 
-/* MAP dimensions */
-const MAP_ROWS = MAP.length;        // 10
-const MAP_COLS = MAP[0].length;     // 10
+/* ════════════════════════════════════════════════════════════
+   DUNGEON LEVELS
+   ════════════════════════════════════════════════════════════
+   LEVELS is an array of level objects.  Index 0 is the shallowest
+   level; the last index is the deepest.
+
+   Each level object has:
+
+     name          — shown in the status bar
+     map           — 10×10 grid of tile values (edit freely)
+     entryFromAbove — {x, y, dir} where the player is placed when
+                      they DESCEND onto this level from above
+     entryFromBelow — {x, y, dir} where the player is placed when
+                      they ASCEND onto this level from below
+                      (null if this is the deepest level)
+
+   The stair connection rule:
+     • The entryFromAbove position on level N should sit on top of
+       a TILE_STAIR_UP tile (so the player can go back up).
+     • The entryFromBelow position on level N should sit on top of
+       a TILE_STAIR_DOWN tile (so the player can go back down).
+
+   This way going down then immediately up returns you to the same
+   spot — the staircases connect like real architectural stairs.
+*/
+const LEVELS = [
+
+  /* ── LEVEL 0: The Entry Hall ── */
+  {
+    name: "THE ENTRY HALL",
+    map: [
+      [1,1,1,1,1,1,1,1,1,1],  // row 0  (north wall)
+      [1,0,0,0,1,0,0,0,0,1],  // row 1
+      [1,0,1,0,1,0,1,1,0,1],  // row 2
+      [1,0,1,0,0,0,0,1,0,1],  // row 3
+      [1,0,1,1,1,1,0,1,0,1],  // row 4
+      [1,0,0,0,0,1,0,0,0,1],  // row 5
+      [1,1,1,0,1,1,1,1,0,1],  // row 6
+      [1,0,0,0,0,0,0,1,0,1],  // row 7
+      [1,0,1,1,1,1,0,2,0,1],  // row 8  — STAIR_DOWN at col 7
+      [1,1,1,1,1,1,1,1,1,1],  // row 9  (south wall)
+    ],
+    /* The player always starts on level 0; treat the start
+       tile as the "entry from above" (arrival point).      */
+    entryFromAbove: { x: 1, y: 1, dir: 0 },
+    /* Level 0 is the top — no stairs lead up from here.   */
+    entryFromBelow: null,
+  },
+
+  /* ── LEVEL 1: The Catacombs ── */
+  /*
+   * A wide-open pillared hall.  The regular grid of stone columns
+   * makes this feel completely different from the Entry Hall above.
+   * STAIR_UP (3) at col 7 matches the STAIR_DOWN on level 0.
+   * STAIR_DOWN (2) at col 2 leads to the Deep Vaults below.
+   */
+  {
+    name: "THE CATACOMBS",
+    map: [
+      [1,1,1,1,1,1,1,1,1,1],  // row 0
+      [1,0,0,0,0,0,0,0,0,1],  // row 1  open aisle
+      [1,0,1,0,1,0,1,0,1,1],  // row 2  pillars at cols 2,4,6,8
+      [1,0,0,0,0,0,0,0,0,1],  // row 3  open aisle
+      [1,0,1,0,1,0,1,0,1,1],  // row 4  pillars
+      [1,0,0,0,0,0,0,0,0,1],  // row 5  open aisle
+      [1,0,1,0,1,0,1,0,1,1],  // row 6  pillars
+      [1,0,0,0,0,0,0,0,0,1],  // row 7  open aisle
+      [1,0,2,0,0,0,0,3,0,1],  // row 8  STAIR_DOWN col 2, STAIR_UP col 7
+      [1,1,1,1,1,1,1,1,1,1],  // row 9
+    ],
+    /* Arrive at the STAIR_UP tile so the player can go back up. */
+    entryFromAbove: { x: 7, y: 8, dir: 0 },
+    /* Arrive at the STAIR_DOWN tile so the player can go back down. */
+    entryFromBelow: { x: 2, y: 8, dir: 0 },
+  },
+
+  /* ── LEVEL 2: The Deep Vaults ── */
+  /*
+   * Tight, winding passages — far more walls than floor.
+   * The irregular layout is a deliberate contrast to the
+   * orderly catacomb pillars on the level above.
+   * STAIR_UP (3) at col 2 matches the STAIR_DOWN on level 1.
+   * No STAIR_DOWN — this is the bottom of the dungeon.
+   */
+  {
+    name: "THE DEEP VAULTS",
+    map: [
+      [1,1,1,1,1,1,1,1,1,1],  // row 0
+      [1,0,0,1,0,0,0,0,0,1],  // row 1
+      [1,0,1,0,0,1,1,0,0,1],  // row 2
+      [1,0,0,0,1,0,0,0,1,1],  // row 3
+      [1,1,1,0,0,1,0,0,0,1],  // row 4
+      [1,0,0,0,1,0,0,1,0,1],  // row 5
+      [1,0,1,1,0,0,1,0,0,1],  // row 6
+      [1,0,0,1,1,0,0,0,1,1],  // row 7
+      [1,0,3,0,0,0,1,0,0,1],  // row 8  STAIR_UP at col 2
+      [1,1,1,1,1,1,1,1,1,1],  // row 9
+    ],
+    entryFromAbove: { x: 2, y: 8, dir: 0 },
+    /* Bottom level — no stairs lead further down. */
+    entryFromBelow: null,
+  },
+
+];
 
 /* ════════════════════════════════════════════════════════════
    PLAYER STATE
    ════════════════════════════════════════════════════════════
-   x, y  — tile coordinates (integers).
-   dir   — index into DIRECTIONS[] below (0=N, 1=E, 2=S, 3=W).
+   x, y   — tile coordinates (column, row) on the current level.
+   dir    — index into DIRECTIONS[] (0=N, 1=E, 2=S, 3=W).
+   level  — index into LEVELS[].
 */
-const player = { x: 1, y: 1, dir: 0 };
+const player = {
+  x:     LEVELS[0].entryFromAbove.x,
+  y:     LEVELS[0].entryFromAbove.y,
+  dir:   LEVELS[0].entryFromAbove.dir,
+  level: 0,
+};
 
 /* Cardinal direction metadata.
    dx / dy describe the unit step when moving in that direction.
@@ -230,11 +352,35 @@ function buildDepthRects() {
   }
 }
 
-/* ── Helper: is a map cell a wall? ── */
+/* ════════════════════════════════════════════════════════════
+   TILE HELPERS
+   ════════════════════════════════════════════════════════════ */
+
+/*
+ * getTile — return the tile value at (col, row) on the current level.
+ * Out-of-bounds coordinates return TILE_WALL (treats edges as solid).
+ */
+function getTile(col, row) {
+  const map = LEVELS[player.level].map;
+  if (row < 0 || row >= map.length || col < 0 || col >= map[0].length) {
+    return TILE_WALL;
+  }
+  return map[row][col];
+}
+
+/*
+ * isWall — returns true if (col, row) blocks movement or line-of-sight.
+ *
+ * This replaces the original single-map version.  The only changes are:
+ *   1. It reads from LEVELS[player.level].map instead of the global MAP.
+ *   2. It uses the TILE_WALL constant instead of the bare number 1.
+ *   3. Stair tiles (2 and 3) return false — they are walkable floor.
+ *
+ * The renderer and moveForward() call this exactly as before; they don't
+ * need to know anything about levels or tile types themselves.
+ */
 function isWall(col, row) {
-  /* Out-of-bounds counts as a wall so we never walk off the map */
-  if (row < 0 || row >= MAP_ROWS || col < 0 || col >= MAP_COLS) return true;
-  return MAP[row][col] === 1;
+  return getTile(col, row) === TILE_WALL;
 }
 
 /* ── Helper: fill a quadrilateral with 4 corner points ──
@@ -248,6 +394,86 @@ function fillQuad(p0, p1, p2, p3) {
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+}
+
+/* ════════════════════════════════════════════════════════════
+   STAIR GLYPH RENDERER
+   ════════════════════════════════════════════════════════════
+   Draws a wireframe staircase symbol into a rectangle on the canvas.
+   Called from the main render loop when a stair tile is directly
+   ahead of the player (in place of the front-wall fill).
+
+   rect      — { x1, y1, x2, y2 } the "far" depth rectangle to draw into
+   stairType — TILE_STAIR_DOWN or TILE_STAIR_UP
+
+   The visual idea:
+     • STAIR_DOWN: horizontal step lines occupy the LOWER half of the rect,
+       getting narrower (more inset) as they recede — like looking down
+       into a stairwell from the top.
+     • STAIR_UP: same but lines occupy the UPPER half — looking up.
+
+   Each step line is also slightly shorter than the one "closer" to you,
+   suggesting the perspective of receding stairs.
+*/
+function drawStairGlyph(rect, stairType) {
+  const { x1, y1, x2, y2 } = rect;
+  const w = x2 - x1;
+  const h = y2 - y1;
+
+  /* Dark tinted background — same treatment as a front wall */
+  ctx.fillStyle = "#000d00";
+  ctx.strokeStyle = "#00ff00";
+  ctx.beginPath();
+  ctx.rect(x1, y1, w, h);
+  ctx.fill();
+  ctx.stroke();
+
+  /* Draw N horizontal step lines.
+     i=0 is the widest/nearest step; i=N-1 is the narrowest/farthest. */
+  const N = 5;
+  ctx.beginPath();
+  ctx.strokeStyle = "#00ff00";
+
+  for (let i = 0; i < N; i++) {
+    /* frac: 0 = nearest step (wide), 1 = farthest step (narrow) */
+    const frac = i / (N - 1);
+
+    /* Horizontal inset increases with frac (perspectival narrowing).
+       Min inset is 4% of width so lines don't touch the border.     */
+    const inset = w * (0.04 + 0.38 * frac);
+
+    /* Vertical position:
+       For STAIR_DOWN, steps start near the bottom and rise toward centre.
+       For STAIR_UP,   steps start near the top   and fall toward centre.
+       Using 60% of the half-height keeps lines within the appropriate half. */
+    let lineY;
+    if (stairType === TILE_STAIR_DOWN) {
+      /* y2 is the bottom edge; subtract a small margin, then step upward */
+      lineY = y2 - h * 0.06 - h * 0.50 * frac;
+    } else {
+      /* y1 is the top edge; add a small margin, then step downward */
+      lineY = y1 + h * 0.06 + h * 0.50 * frac;
+    }
+
+    ctx.moveTo(x1 + inset, lineY);
+    ctx.lineTo(x2 - inset, lineY);
+  }
+
+  ctx.stroke();
+
+  /* Small directional arrow in the centre of the rect.
+     ▼ for down-stairs, ▲ for up-stairs.  Sized to fit the rectangle. */
+  const arrowSize = Math.max(8, h * 0.18);
+  ctx.font = `${arrowSize}px "Courier New"`;
+  ctx.fillStyle = "#00ff00";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const arrowChar = (stairType === TILE_STAIR_DOWN) ? "▼" : "▲";
+  /* Place arrow in the half of the rect that ISN'T occupied by steps */
+  const arrowY = (stairType === TILE_STAIR_DOWN)
+    ? y1 + h * 0.25   // upper portion (steps are in lower)
+    : y2 - h * 0.25;  // lower portion (steps are in upper)
+  ctx.fillText(arrowChar, x1 + w / 2, arrowY);
 }
 
 /* ── Main render function ── */
@@ -283,18 +509,25 @@ function render() {
     const far  = depthRects[d + 1];   // smaller rect (further away)
     const near = depthRects[d];       // larger rect  (closer)
 
-    /* ── FRONT WALL ──
-       Draw it if the tile ONE step further ahead is a wall.        */
+    /* ── FRONT WALL / STAIR ──
+       Check the tile ONE step further ahead.                          */
     const frontX = tx + fd.dx;
     const frontY = ty + fd.dy;
     if (isWall(frontX, frontY)) {
-      /* The front wall fills the far rectangle */
-      ctx.fillStyle = "#001a00";   // very dark green tint for depth
+      /* Solid wall: fill the far rectangle with a dark tint */
+      ctx.fillStyle = "#001a00";
       ctx.strokeStyle = "#00ff00";
       ctx.beginPath();
       ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
       ctx.fill();
       ctx.stroke();
+    } else {
+      /* Not a wall — check if it's a staircase tile and draw the glyph.
+         (Open floor tiles need no special drawing here.)               */
+      const frontTile = getTile(frontX, frontY);
+      if (frontTile === TILE_STAIR_DOWN || frontTile === TILE_STAIR_UP) {
+        drawStairGlyph(far, frontTile);
+      }
     }
 
     /* ── LEFT WALL ──
@@ -354,17 +587,103 @@ function render() {
   ctx.rect(near0.x1, near0.y1, near0.x2 - near0.x1, near0.y2 - near0.y1);
   ctx.stroke();
 
-  /* Update the status text */
+  /* Update UI elements that depend on player state */
   updateStatus();
+  updateStairButton();
 }
 
 /* ════════════════════════════════════════════════════════════
    STATUS BAR
    ════════════════════════════════════════════════════════════ */
 function updateStatus() {
-  const dir  = DIRECTIONS[player.dir];
+  const dir   = DIRECTIONS[player.dir];
+  /* Display level as 1-indexed (more natural for players than 0-indexed) */
+  const lvlNum = player.level + 1;
   document.getElementById("status").textContent =
-    `X:${player.x}  Y:${player.y}  FACING:${dir.name}`;
+    `LEVEL ${lvlNum}: ${LEVELS[player.level].name}  ` +
+    `X:${player.x}  Y:${player.y}  ${dir.name}`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   STAIR BUTTON
+   ════════════════════════════════════════════════════════════
+   The stair button is only shown when the player is standing
+   on a stair tile.  Its label changes to match the direction.
+*/
+function updateStairButton() {
+  const tile      = getTile(player.x, player.y);
+  const wrap      = document.getElementById("stair-wrap");
+  const btn       = document.getElementById("btn-stairs");
+  const onStairs  = (tile === TILE_STAIR_DOWN || tile === TILE_STAIR_UP);
+
+  wrap.style.display = onStairs ? "block" : "none";
+
+  if (tile === TILE_STAIR_DOWN) {
+    btn.textContent = "DESCEND ▼";
+  } else if (tile === TILE_STAIR_UP) {
+    btn.textContent = "ASCEND ▲";
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   LEVEL TRANSITIONS
+   ════════════════════════════════════════════════════════════
+   changeLevel(direction) moves the player to an adjacent level.
+
+   direction =  1 → descend (go deeper, level index increases)
+   direction = -1 → ascend  (go up,     level index decreases)
+
+   The function:
+     1. Checks the player is on the correct stair type.
+     2. Checks the target level exists.
+     3. Reads the entry point from the target level's definition.
+     4. Moves the player there and redraws.
+
+   Entry points are stored directly in the LEVELS array so you
+   don't have to search the map for a stair tile — you simply
+   declare "when arriving from above, start at (x, y, dir)."
+*/
+function changeLevel(direction) {
+  const tile       = getTile(player.x, player.y);
+  const targetIdx  = player.level + direction;
+
+  /* Guard: must be on the right stair type */
+  if (direction === 1 && tile !== TILE_STAIR_DOWN) return;
+  if (direction === -1 && tile !== TILE_STAIR_UP)  return;
+
+  /* Guard: target level must exist */
+  if (targetIdx < 0 || targetIdx >= LEVELS.length) return;
+
+  const targetLevel = LEVELS[targetIdx];
+
+  /* Choose the arrival entry point based on which direction we're travelling.
+     Going DOWN → arrive at the target level's entryFromAbove point
+                  (which sits on a STAIR_UP tile so we can come back).
+     Going UP   → arrive at the target level's entryFromBelow point
+                  (which sits on a STAIR_DOWN tile so we can go back down). */
+  const entry = (direction === 1)
+    ? targetLevel.entryFromAbove
+    : targetLevel.entryFromBelow;
+
+  /* Safety check — should never be null if the map is designed correctly,
+     but let's be graceful rather than crash with a bad map.              */
+  if (!entry) return;
+
+  /* Move the player */
+  player.level = targetIdx;
+  player.x     = entry.x;
+  player.y     = entry.y;
+  player.dir   = entry.dir;
+
+  render();
+}
+
+/* Convenience wrapper called by the stair button and by keyboard input.
+   Reads the tile under the player and picks the right direction.       */
+function useStairs() {
+  const tile = getTile(player.x, player.y);
+  if (tile === TILE_STAIR_DOWN) changeLevel(1);
+  if (tile === TILE_STAIR_UP)   changeLevel(-1);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -418,20 +737,27 @@ function addButtonHandler(id, action) {
   });
 }
 
-addButtonHandler("btn-fwd",  () => moveForward(1));
-addButtonHandler("btn-back", () => moveForward(-1));
-addButtonHandler("btn-lt",   () => rotate(-1));
-addButtonHandler("btn-rt",   () => rotate(1));
+addButtonHandler("btn-fwd",    () => moveForward(1));
+addButtonHandler("btn-back",   () => moveForward(-1));
+addButtonHandler("btn-lt",     () => rotate(-1));
+addButtonHandler("btn-rt",     () => rotate(1));
+addButtonHandler("btn-stairs", () => useStairs());
 
 /* ════════════════════════════════════════════════════════════
    INPUT — KEYBOARD (DESKTOP / TESTING)
-   ════════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════════════════
+   Arrow keys: movement (unchanged from v1).
+   >  or  .  : descend stairs (roguelike convention: > = go down)
+   <  or  ,  : ascend  stairs (roguelike convention: < = go up)
+*/
 document.addEventListener("keydown", (e) => {
   switch (e.key) {
     case "ArrowUp":    moveForward(1);  e.preventDefault(); break;
     case "ArrowDown":  moveForward(-1); e.preventDefault(); break;
     case "ArrowLeft":  rotate(-1);      e.preventDefault(); break;
     case "ArrowRight": rotate(1);       e.preventDefault(); break;
+    case ">": case ".": useStairs();    e.preventDefault(); break;
+    case "<": case ",": useStairs();    e.preventDefault(); break;
   }
 });
 
