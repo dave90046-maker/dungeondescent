@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dungeon Descent — Combat Prototype</title>
+<style>
+  :root {
+    --bg: #000;
+    --line: #0a3d0a;
+    --green: #00ff00;
+    --green-dim: #1f9e1f;
+    --amber: #ffb000;
+    --red: #ff4d4d;
+    --red-dim: #a02828;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--green);
+    font-family: "Courier New", Courier, monospace;
+    font-size: 18px;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  #wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 18px 16px 40px;
+  }
+
+  .title-bar {
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .title-bar h1 {
+    font-size: 1.6rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--green);
+    text-shadow: 0 0 8px var(--green);
+    font-weight: normal;
+  }
+  .title-bar .sub {
+    color: var(--green-dim);
+    letter-spacing: 0.2em;
+    font-size: 0.85rem;
+  }
+
+  .frame {
+    border: 2px solid var(--green);
+    box-shadow: 0 0 12px var(--green);
+    background: #000;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .frame-label {
+    color: var(--green-dim);
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 4px;
+  }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 640px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+
+  table.roster {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 19px;
+  }
+  table.roster td, table.roster th {
+    padding: 2px 4px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  table.roster th {
+    color: var(--green-dim);
+    font-weight: normal;
+    font-size: 16px;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--line);
+  }
+  .row-dead td { color: var(--red-dim); text-decoration: line-through; }
+  .row-acting td { color: var(--green); text-shadow: 0 0 4px var(--green); }
+  .row-defending td.name::after { content: " (parrying)"; color: var(--green-dim); font-size: 15px; }
+
+  .hp-bar {
+    display: inline-block;
+    width: 110px;
+    height: 10px;
+    border: 1px solid var(--green);
+    vertical-align: middle;
+    position: relative;
+    margin-right: 6px;
+  }
+  .hp-fill {
+    height: 100%;
+    background: var(--green);
+  }
+  .hp-fill.low { background: var(--amber); }
+  .hp-fill.crit { background: var(--red); }
+
+  .tag {
+    display: inline-block;
+    border: 1px solid var(--line);
+    color: var(--green-dim);
+    font-size: 17px;
+    padding: 0 5px;
+    letter-spacing: 1px;
+  }
+
+  .group-line { margin-bottom: 6px; }
+  .group-label {
+    display: inline-block;
+    width: 22px;
+    color: var(--green);
+    text-shadow: 0 0 4px var(--green);
+  }
+
+  #action-panel .prompt {
+    color: var(--green);
+    text-shadow: 0 0 4px var(--green);
+    margin-bottom: 8px;
+  }
+  #action-panel .prompt .blink {
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  button.cmd {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 17px;
+    background: #000;
+    color: var(--green);
+    border: 2px solid var(--green);
+    border-radius: 4px;
+    box-shadow: 0 0 6px var(--green);
+    padding: 8px 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    touch-action: manipulation;
+    transition: background 0.08s;
+  }
+  button.cmd:hover:not(:disabled),
+  button.cmd:active:not(:disabled) {
+    background: #003300;
+  }
+  button.cmd:disabled {
+    color: var(--line);
+    border-color: var(--line);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  button.cmd.primary {
+    border-color: var(--amber);
+    color: var(--amber);
+    box-shadow: 0 0 6px var(--amber);
+  }
+  button.cmd.primary:hover:not(:disabled),
+  button.cmd.primary:active:not(:disabled) {
+    background: #332200;
+  }
+  button.cmd.danger {
+    border-color: var(--red);
+    color: var(--red);
+    box-shadow: 0 0 6px var(--red);
+  }
+  button.cmd.danger:hover:not(:disabled),
+  button.cmd.danger:active:not(:disabled) {
+    background: #330000;
+  }
+
+  #log-panel { height: 230px; overflow-y: auto; }
+  #log {
+    font-size: 18px;
+    line-height: 1.35;
+  }
+  #log .line { margin-bottom: 2px; }
+  #log .sys { color: var(--green-dim); }
+  #log .hit { color: var(--green); text-shadow: 0 0 3px var(--green); }
+  #log .miss { color: var(--green-dim); }
+  #log .dmg-party { color: var(--amber); }
+  #log .dead { color: var(--red); }
+  #log .heal { color: #7fd1ff; }
+  #log .round { color: var(--green); text-shadow: 0 0 4px var(--green); border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
+
+  .end-banner {
+    text-align: center;
+    font-size: 28px;
+    letter-spacing: 4px;
+    padding: 14px 0;
+    text-transform: uppercase;
+  }
+  .end-banner.win { color: var(--green); text-shadow: 0 0 10px var(--green); }
+  .end-banner.lose { color: var(--red); text-shadow: 0 0 10px var(--red); }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: var(--green); }
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <div class="title-bar">
+    <h1>Dungeon Descent</h1>
+    <div class="sub">— combat —</div>
+  </div>
+
+  <div class="panels">
+    <div class="frame">
+      <div class="frame-label">PARTY</div>
+      <table class="roster" id="party-table"></table>
+    </div>
+    <div class="frame">
+      <div class="frame-label">ENCOUNTER</div>
+      <div id="monster-list"></div>
+    </div>
+  </div>
+
+  <div class="frame" id="action-panel">
+    <div class="frame-label">ORDERS</div>
+    <div id="action-content"></div>
+  </div>
+
+  <div class="frame" id="log-panel">
+    <div class="frame-label">COMBAT LOG</div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<script>
+/* ---------- dice ---------- */
+function roll(n, sides, bonus) {
+  bonus = bonus || 0;
+  let total = bonus;
+  for (let i = 0; i < n; i++) total += 1 + Math.floor(Math.random() * sides);
+  return total;
+}
+function d20() { return roll(1, 20, 0); }
+
+/* ---------- state ---------- */
+function makeChar(o) {
+  return {
+    id: o.id, name: o.name, cls: o.cls, race: o.race, row: o.row,
+    maxHp: o.hp, hp: o.hp, ac: o.ac, atk: o.atk, dmg: o.dmg,
+    spells: o.spells || [],
+    defending: false,
+    action: null // {type:'attack'|'cast'|'parry'|'run', groupId, spellId, targetId}
+  };
+}
+
+function makeGroup(id, label, name, count, stats) {
+  const monsters = [];
+  for (let i = 0; i < count; i++) {
+    monsters.push({
+      id: label + (i + 1), hp: stats.hp, maxHp: stats.hp,
+      ac: stats.ac, atk: stats.atk, dmg: stats.dmg, alive: true
+    });
+  }
+  return { id, label, name, monsters };
+}
+
+const SPELLS = {
+  magic_missile: { name: 'Magic Missile', kind: 'attack', dmg: [1, 4, 1], autoHit: true, uses: 3 },
+  cure_light: { name: 'Cure Light Wounds', kind: 'heal', heal: [1, 8, 0], uses: 3 }
+};
+
+let state = null;
+
+function freshEncounter() {
+  return {
+    round: 1,
+    phase: 'orders', // 'orders' | 'resolved' | 'win' | 'lose' | 'fled'
+    party: [
+      makeChar({ id: 'tor', name: 'Tor', cls: 'Fighter', race: 'Human', row: 'front',
+        hp: 18, ac: 4, atk: 3, dmg: [1, 8, 2] }),
+      makeChar({ id: 'shadow', name: 'Shadow', cls: 'Thief', race: 'Hobbit', row: 'front',
+        hp: 10, ac: 5, atk: 2, dmg: [1, 6, 0] }),
+      makeChar({ id: 'aldric', name: 'Aldric', cls: 'Priest', race: 'Human', row: 'back',
+        hp: 12, ac: 6, atk: 1, dmg: [1, 6, 1], spells: [{ id: 'cure_light', usesLeft: 3 }] }),
+      makeChar({ id: 'mialee', name: 'Mialee', cls: 'Mage', race: 'Elf', row: 'back',
+        hp: 7, ac: 9, atk: 0, dmg: [1, 4, 0], spells: [{ id: 'magic_missile', usesLeft: 3 }] })
+    ],
+    groups: [
+      makeGroup('A', 'A', 'Kobold', 3, { hp: 4, ac: 8, atk: 0, dmg: [1, 4, 0] }),
+      makeGroup('B', 'B', 'Orc Captain', 1, { hp: 15, ac: 5, atk: 3, dmg: [1, 8, 1] })
+    ],
+    actorQueue: [],
+    log: []
+  };
+}
+
+function aliveParty() { return state.party.filter(c => c.hp > 0); }
+function aliveGroups() { return state.groups.filter(g => g.monsters.some(m => m.alive)); }
+function groupAliveCount(g) { return g.monsters.filter(m => m.alive).length; }
+
+/* ---------- logging ---------- */
+function log(text, cls) {
+  state.log.push({ text, cls: cls || 'sys' });
+}
+
+/* ---------- round setup ---------- */
+function startRound() {
+  state.party.forEach(c => { c.defending = false; c.action = null; });
+  state.actorQueue = aliveParty().map(c => c.id);
+  state.phase = 'orders';
+  log('--- Round ' + state.round + ' ---', 'round');
+  render();
+}
+
+/* ---------- ordering UI ---------- */
+function currentActor() {
+  if (!state.actorQueue.length) return null;
+  return state.party.find(c => c.id === state.actorQueue[0]);
+}
+
+function setAction(action) {
+  const actor = currentActor();
+  if (!actor) return;
+  actor.action = action;
+  state.actorQueue.shift();
+  if (!state.actorQueue.length) {
+    state.phase = 'ready';
+  }
+  render();
+}
+
+/* ---------- combat resolution ---------- */
+function resolveRound() {
+  state.phase = 'resolving';
+  render();
+
+  const partyFirst = d20() + 1 >= d20() + 1; // simple coin-flip-with-flavor initiative
+  if (partyFirst) {
+    log('The party reacts first!', 'sys');
+    runPartyActions();
+    if (checkEnd()) { render(); return; }
+    runMonsterActions();
+  } else {
+    log('The monsters strike first!', 'sys');
+    runMonsterActions();
+    if (checkEnd()) { render(); return; }
+    runPartyActions();
+  }
+
+  if (checkEnd()) { render(); return; }
+
+  state.round++;
+  startRound();
+}
+
+function runPartyActions() {
+  for (const c of state.party) {
+    if (c.hp <= 0 || !c.action) continue;
+    const a = c.action;
+    if (a.type === 'parry') {
+      c.defending = true;
+      log(c.name + ' braces, shield raised, watching for an opening.', 'sys');
+    } else if (a.type === 'attack') {
+      const group = state.groups.find(g => g.id === a.groupId);
+      if (!group) continue;
+      const target = group.monsters.find(m => m.id === a.targetId && m.alive)
+        || group.monsters.find(m => m.alive);
+      if (!target) { log(group.name + ' group is already gone.', 'sys'); continue; }
+      const toHit = d20() + c.atk;
+      const dc = 10 + target.ac;
+      if (toHit >= dc) {
+        const dmg = roll(c.dmg[0], c.dmg[1], c.dmg[2]);
+        target.hp -= dmg;
+        log(c.name + ' strikes a ' + group.name + ' for ' + dmg + ' damage!', 'hit');
+        if (target.hp <= 0) {
+          target.alive = false;
+          log('The ' + group.name + ' falls!', 'dead');
+        }
+      } else {
+        log(c.name + ' swings at a ' + group.name + ' and misses.', 'miss');
+      }
+    } else if (a.type === 'cast') {
+      const spell = SPELLS[a.spellId];
+      const sref = c.spells.find(s => s.id === a.spellId);
+      if (!sref || sref.usesLeft <= 0) { log(c.name + ' has no spell points left for that.', 'sys'); continue; }
+      sref.usesLeft--;
+      if (spell.kind === 'attack') {
+        const group = state.groups.find(g => g.id === a.groupId);
+        if (!group) continue;
+        const target = group.monsters.find(m => m.id === a.targetId && m.alive)
+          || group.monsters.find(m => m.alive);
+        if (!target) { log(group.name + ' group is already gone.', 'sys'); continue; }
+        const dmg = roll(spell.dmg[0], spell.dmg[1], spell.dmg[2]);
+        target.hp -= dmg;
+        log(c.name + ' casts ' + spell.name + ' at a ' + group.name + ' for ' + dmg + ' damage!', 'hit');
+        if (target.hp <= 0) {
+          target.alive = false;
+          log('The ' + group.name + ' falls!', 'dead');
+        }
+      } else if (spell.kind === 'heal') {
+        const targetChar = state.party.find(p => p.id === a.targetId);
+        if (!targetChar || targetChar.hp <= 0) { log('No valid target to heal.', 'sys'); continue; }
+        const amt = roll(spell.heal[0], spell.heal[1], spell.heal[2]);
+        const before = targetChar.hp;
+        targetChar.hp = Math.min(targetChar.maxHp, targetChar.hp + amt);
+        log(c.name + ' casts ' + spell.name + ' on ' + targetChar.name + ', restoring ' + (targetChar.hp - before) + ' HP.', 'heal');
+      }
+    } else if (a.type === 'run') {
+      // handled separately before actions even start, but kept here as fallback
+    }
+  }
+}
+
+function runMonsterActions() {
+  for (const g of state.groups) {
+    for (const m of g.monsters) {
+      if (!m.alive) continue;
+      const front = state.party.filter(c => c.row === 'front' && c.hp > 0);
+      const back = state.party.filter(c => c.row === 'back' && c.hp > 0);
+      const pool = front.length ? front : back;
+      if (!pool.length) return;
+      const target = pool[Math.floor(Math.random() * pool.length)];
+      const toHit = d20() + m.atk;
+      const dc = 10 + target.ac;
+      if (toHit >= dc) {
+        let dmg = roll(m.dmg[0], m.dmg[1], m.dmg[2]);
+        if (target.defending) dmg = Math.max(1, Math.floor(dmg / 2));
+        target.hp -= dmg;
+        const cls = target.defending ? 'dmg-party' : 'dmg-party';
+        log('A ' + g.name + ' hits ' + target.name + (target.defending ? ' (parried) ' : ' ') + 'for ' + dmg + ' damage!', cls);
+        if (target.hp <= 0) {
+          target.hp = 0;
+          log(target.name + ' goes down!', 'dead');
+        }
+      } else {
+        log('A ' + g.name + ' attacks ' + target.name + ' and misses.', 'miss');
+      }
+    }
+  }
+}
+
+function checkEnd() {
+  if (aliveGroups().length === 0) {
+    state.phase = 'win';
+    log('All enemies defeated. Victory!', 'round');
+    return true;
+  }
+  if (aliveParty().length === 0) {
+    state.phase = 'lose';
+    log('The party has fallen...', 'round');
+    return true;
+  }
+  return false;
+}
+
+function attemptRun() {
+  const ok = Math.random() < 0.5;
+  if (ok) {
+    state.phase = 'fled';
+    log('The party breaks off and flees into the dark!', 'round');
+  } else {
+    log('No escape! The party fails to flee.', 'sys');
+    runMonsterActions();
+    if (!checkEnd()) {
+      state.round++;
+      startRound();
+      return;
+    }
+  }
+  render();
+}
+
+/* ---------- render ---------- */
+function hpClass(c) {
+  const pct = c.hp / c.maxHp;
+  if (c.hp <= 0) return 'crit';
+  if (pct <= 0.3) return 'crit';
+  if (pct <= 0.6) return 'low';
+  return '';
+}
+
+function renderParty() {
+  const t = document.getElementById('party-table');
+  const actor = currentActor();
+  let rows = '<tr><th></th><th>NAME</th><th>HP</th><th>AC</th><th>ROW</th></tr>';
+  state.party.forEach((c, i) => {
+    const dead = c.hp <= 0;
+    const acting = actor && actor.id === c.id;
+    const pct = Math.max(0, Math.round((c.hp / c.maxHp) * 100));
+    let cls = 'row';
+    if (dead) cls += ' row-dead';
+    if (acting) cls += ' row-acting';
+    if (c.defending) cls += ' row-defending';
+    rows += '<tr class="' + cls + '">' +
+      '<td>' + (i + 1) + '.</td>' +
+      '<td class="name">' + c.name + ' <span class="tag">' + c.cls.slice(0,3).toUpperCase() + '</span></td>' +
+      '<td><span class="hp-bar"><span class="hp-fill ' + hpClass(c) + '" style="width:' + pct + '%"></span></span>' + Math.max(0,c.hp) + '/' + c.maxHp + '</td>' +
+      '<td>' + c.ac + '</td>' +
+      '<td>' + (c.row === 'front' ? 'FRONT' : 'BACK') + '</td>' +
+      '</tr>';
+  });
+  t.innerHTML = rows;
+}
+
+function renderMonsters() {
+  const el = document.getElementById('monster-list');
+  let html = '';
+  state.groups.forEach(g => {
+    const alive = groupAliveCount(g);
+    const total = g.monsters.length;
+    html += '<div class="group-line"><span class="group-label">' + g.label + ')</span> ' +
+      g.name + (total > 1 ? ' x' + total : '') +
+      ' <span class="tag">' + alive + '/' + total + ' alive</span></div>';
+  });
+  el.innerHTML = html;
+}
+
+function renderActionPanel() {
+  const el = document.getElementById('action-content');
+  if (state.phase === 'win' || state.phase === 'lose' || state.phase === 'fled') {
+    const label = state.phase === 'win' ? 'VICTORY' : (state.phase === 'lose' ? 'PARTY DEFEATED' : 'FLED THE BATTLE');
+    const cls = state.phase === 'win' ? 'win' : 'lose';
+    el.innerHTML = '<div class="end-banner ' + cls + '">' + label + '</div>' +
+      '<div class="btn-row" style="justify-content:center"><button class="cmd primary" onclick="restart()">RESTART ENCOUNTER</button></div>';
+    return;
+  }
+
+  if (state.phase === 'resolving') {
+    el.innerHTML = '<div class="prompt">Resolving round...</div>';
+    return;
+  }
+
+  if (state.phase === 'ready') {
+    el.innerHTML = '<div class="prompt">All orders given.</div>' +
+      '<div class="btn-row"><button class="cmd primary" onclick="resolveRound()">RESOLVE ROUND &rarr;</button></div>';
+    return;
+  }
+
+  const actor = currentActor();
+  if (!actor) { el.innerHTML = ''; return; }
+
+  const groups = aliveGroups();
+  let html = '<div class="prompt">' + actor.name + ' the ' + actor.cls + ', what will you do?<span class="blink">_</span></div>';
+  html += '<div class="btn-row">';
+  groups.forEach(g => {
+    html += '<button class="cmd" onclick="chooseAttack(\'' + g.id + '\')">ATTACK ' + g.label + '</button>';
+  });
+  actor.spells.forEach(s => {
+    const spell = SPELLS[s.id];
+    html += '<button class="cmd" ' + (s.usesLeft <= 0 ? 'disabled' : '') + ' onclick="chooseCastMenu(\'' + s.id + '\')">CAST ' + spell.name.toUpperCase() + ' (' + s.usesLeft + ')</button>';
+  });
+  html += '<button class="cmd" onclick="setAction({type:\'parry\'})">PARRY</button>';
+  html += '<button class="cmd danger" onclick="attemptRun()">RUN</button>';
+  html += '</div>';
+
+  if (window._castMenu === actor.id + ':' + window._castSpellId) {
+    const spell = SPELLS[window._castSpellId];
+    html += '<div class="prompt">Target for ' + spell.name + ':</div><div class="btn-row">';
+    if (spell.kind === 'attack') {
+      groups.forEach(g => {
+        html += '<button class="cmd" onclick="confirmCast(\'' + g.id + '\', null)">' + g.label + ') ' + g.name + '</button>';
+      });
+    } else {
+      state.party.filter(p => p.hp > 0).forEach(p => {
+        html += '<button class="cmd" onclick="confirmCast(null, \'' + p.id + '\')">' + p.name + ' (' + p.hp + '/' + p.maxHp + ')</button>';
+      });
+    }
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function chooseAttack(groupId) {
+  setAction({ type: 'attack', groupId });
+}
+
+window._castMenu = null;
+window._castSpellId = null;
+function chooseCastMenu(spellId) {
+  const actor = currentActor();
+  window._castMenu = actor.id + ':' + spellId;
+  window._castSpellId = spellId;
+  renderActionPanel();
+}
+function confirmCast(groupId, targetId) {
+  const spellId = window._castSpellId;
+  window._castMenu = null;
+  window._castSpellId = null;
+  setAction({ type: 'cast', spellId, groupId, targetId });
+}
+
+function renderLog() {
+  const el = document.getElementById('log');
+  el.innerHTML = state.log.map(l => '<div class="line ' + l.cls + '">' + l.text + '</div>').join('');
+  const panel = document.getElementById('log-panel');
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function render() {
+  renderParty();
+  renderMonsters();
+  renderActionPanel();
+  renderLog();
+}
+
+function restart() {
+  state = freshEncounter();
+  startRound();
+}
+
+restart();
+</script>
+</body>
+</html>

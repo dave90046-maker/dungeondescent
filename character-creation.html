@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dungeon Descent — Character Creation</title>
+<style>
+  :root {
+    --bg: #000;
+    --line: #0a3d0a;
+    --green: #00ff00;
+    --green-dim: #1f9e1f;
+    --amber: #ffb000;
+    --red: #ff4d4d;
+    --red-dim: #a02828;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--green);
+    font-family: "Courier New", Courier, monospace;
+    font-size: 18px;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  #wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 18px 16px 40px;
+  }
+
+  .title-bar {
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .title-bar h1 {
+    font-size: 1.6rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--green);
+    text-shadow: 0 0 8px var(--green);
+    font-weight: normal;
+  }
+  .title-bar .sub {
+    color: var(--green-dim);
+    letter-spacing: 0.2em;
+    font-size: 0.85rem;
+  }
+
+  .frame {
+    border: 2px solid var(--green);
+    box-shadow: 0 0 12px var(--green);
+    background: #000;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .frame-label {
+    color: var(--green-dim);
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 4px;
+  }
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .field-row label {
+    color: var(--green-dim);
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    min-width: 90px;
+  }
+  input[type="text"] {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 18px;
+    background: #000;
+    color: var(--green);
+    border: 2px solid var(--green);
+    border-radius: 4px;
+    padding: 6px 10px;
+    flex: 1;
+    min-width: 160px;
+  }
+  input[type="text"]:focus { outline: none; box-shadow: 0 0 6px var(--green); }
+
+  .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  button.cmd {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 16px;
+    background: #000;
+    color: var(--green);
+    border: 2px solid var(--green);
+    border-radius: 4px;
+    box-shadow: 0 0 6px var(--green);
+    padding: 7px 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    touch-action: manipulation;
+    transition: background 0.08s;
+  }
+  button.cmd:hover:not(:disabled),
+  button.cmd:active:not(:disabled) { background: #003300; }
+  button.cmd:disabled {
+    color: var(--line);
+    border-color: var(--line);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  button.cmd.selected {
+    background: var(--green);
+    color: #000;
+  }
+  button.cmd.primary { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  button.cmd.primary:hover:not(:disabled), button.cmd.primary:active:not(:disabled) { background: #332200; }
+  button.cmd.danger { border-color: var(--red); color: var(--red); box-shadow: 0 0 6px var(--red); }
+  button.cmd.danger:hover:not(:disabled), button.cmd.danger:active:not(:disabled) { background: #330000; }
+  button.cmd.small { font-size: 14px; padding: 3px 8px; }
+
+  .pool-readout {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+  }
+  .pool-readout .num { color: var(--amber); text-shadow: 0 0 4px var(--amber); }
+
+  table.stats {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+    font-size: 18px;
+  }
+  table.stats td {
+    padding: 4px 6px;
+    vertical-align: middle;
+  }
+  table.stats td.stat-name { width: 70px; color: var(--green-dim); }
+  table.stats td.stat-val { width: 50px; text-align: center; font-size: 1.1rem; }
+  table.stats td.stat-mod { width: 60px; text-align: center; color: var(--green-dim); }
+  table.stats td.stat-btns { white-space: nowrap; }
+  .unmet { color: var(--red); }
+
+  table.roster {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 17px;
+  }
+  table.roster td, table.roster th {
+    padding: 3px 5px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  table.roster th {
+    color: var(--green-dim);
+    font-weight: normal;
+    font-size: 14px;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .req-note { color: var(--green-dim); font-size: 13px; }
+
+  #status-log { color: var(--green-dim); font-size: 15px; min-height: 22px; }
+  #status-log.ok { color: var(--green); text-shadow: 0 0 4px var(--green); }
+  #status-log.err { color: var(--red); }
+
+  .empty-note { color: var(--line); font-style: italic; }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: var(--green); }
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <div class="title-bar">
+    <h1>Dungeon Descent</h1>
+    <div class="sub">— character creation —</div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-label">NEW CHARACTER</div>
+
+    <div class="field-row">
+      <label>NAME</label>
+      <input type="text" id="name-input" maxlength="16" placeholder="Type a name...">
+    </div>
+
+    <div class="field-row">
+      <label>RACE</label>
+      <div class="btn-row" id="race-buttons"></div>
+    </div>
+
+    <div class="pool-readout">POLISH POOL: <span class="num" id="pool-amount">5</span> points remaining</div>
+    <div class="btn-row">
+      <button class="cmd" id="reroll-btn" onclick="rerollStats()">REROLL STATS (3 left)</button>
+      <button class="cmd" onclick="resetPolish()">RESET POLISH</button>
+    </div>
+
+    <table class="stats" id="stat-table"></table>
+
+    <div class="field-row" style="margin-top:4px;">
+      <label>CLASS</label>
+      <div class="btn-row" id="class-buttons"></div>
+    </div>
+    <div class="req-note">Requirements: FIGHTER needs STR 11+, THIEF needs DEX 11+, PRIEST needs WIS 11+, MAGE needs INT 11+.</div>
+
+    <div class="frame-label" style="margin-top:10px;">PREVIEW</div>
+    <div id="preview-box"></div>
+
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="cmd primary" id="add-btn" onclick="addToParty()">ADD TO PARTY</button>
+    </div>
+    <div id="status-log"></div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-label">PARTY ROSTER (<span id="roster-count">0</span>/6)</div>
+    <table class="roster" id="roster-table"></table>
+  </div>
+
+  <div class="frame">
+    <div class="btn-row">
+      <button class="cmd primary" id="begin-btn" onclick="beginAdventure()">BEGIN ADVENTURE</button>
+    </div>
+    <div id="begin-log" class="req-note"></div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════
+   DICE
+   ════════════════════════════════════════════════════════════ */
+function roll(n, sides, bonus) {
+  bonus = bonus || 0;
+  let total = bonus;
+  for (let i = 0; i < n; i++) total += 1 + Math.floor(Math.random() * sides);
+  return total;
+}
+function statMod(score) { return Math.floor((score - 10) / 2); }
+function fmtMod(m) { return m >= 0 ? "+" + m : String(m); }
+
+/* ════════════════════════════════════════════════════════════
+   RACES
+   ════════════════════════════════════════════════════════════
+   Modifiers applied on top of 3d6 rolls (clamped to 6-18).
+   Humans get no stat mods but a larger polish pool (7 vs 5) —
+   their advantage is flexibility across any class.
+*/
+const POLISH_BASE  = 5;  // points to fine-tune rolled stats
+const POLISH_HUMAN = 7;  // human gets a bit more to compensate for no racial bonuses
+const MAX_REROLLS  = 3;  // reroll chances per character
+
+const RACES = {
+  human:  { label: "Human",  mods: { str:  0, dex:  0, con:  0, int:  0, wis:  0 } },
+  elf:    { label: "Elf",    mods: { str: -1, dex:  1, con: -2, int:  2, wis:  0 } },
+  dwarf:  { label: "Dwarf",  mods: { str:  2, dex: -2, con:  2, int: -2, wis:  0 } },
+  gnome:  { label: "Gnome",  mods: { str: -2, dex: -2, con:  0, int:  2, wis:  2 } },
+  hobbit: { label: "Hobbit", mods: { str: -2, dex:  3, con: -2, int:  0, wis:  1 } },
+};
+
+/* ════════════════════════════════════════════════════════════
+   CLASSES
+   ════════════════════════════════════════════════════════════ */
+const CLASSES = {
+  fighter: { label: "Fighter", req: { stat: "str", min: 11 }, hitDie: 10, atkStat: "str",
+             weapon: { name: "Short Sword", dice: [1, 6, 0] }, row: "front" },
+  thief:   { label: "Thief",   req: { stat: "dex", min: 11 }, hitDie: 8,  atkStat: "dex",
+             weapon: { name: "Dagger", dice: [1, 4, 0] }, row: "front" },
+  priest:  { label: "Priest",  req: { stat: "wis", min: 11 }, hitDie: 8,  atkStat: "str",
+             weapon: { name: "Mace", dice: [1, 6, 1] }, row: "back" },
+  mage:    { label: "Mage",    req: { stat: "int", min: 11 }, hitDie: 4,  atkStat: "str",
+             weapon: { name: "Dagger", dice: [1, 4, 0] }, row: "back" },
+};
+
+function classBaseAtkL1(clsKey) {
+  if (clsKey === "fighter") return 1;
+  return 0;
+}
+
+const STARTING_ARMOR_AC = { mage: 9, fighter: 8, thief: 8, priest: 8 };
+
+/* ════════════════════════════════════════════════════════════
+   DRAFT STATE
+   ════════════════════════════════════════════════════════════
+   rolledStats = 3d6 + race mod, clamped 6-18 — the "fate" roll.
+   rawRolls    = the actual 3d6 number before race mod, for display.
+   stats       = rolledStats + any polish spending (≥ rolledStats, ≤ 18).
+   polish      = remaining fine-tune points (fixed per race, reset on reroll).
+   rerollsLeft = how many more rerolls the player can take.
+*/
+let draft = {
+  race: "human",
+  rawRolls:    {},
+  rolledStats: {},
+  stats:       {},
+  polish:      POLISH_HUMAN,
+  rerollsLeft: MAX_REROLLS,
+  cls:         null,
+};
+
+let party  = [];
+let nextId = 1;
+
+/* ════════════════════════════════════════════════════════════
+   ROLLING
+   ════════════════════════════════════════════════════════════ */
+function rollStats(raceKey) {
+  const mods = RACES[raceKey].mods;
+  const raw = {}, rolled = {};
+  ["str", "dex", "con", "int", "wis"].forEach(s => {
+    raw[s] = roll(3, 6);
+    rolled[s] = Math.min(18, Math.max(6, raw[s] + mods[s]));
+  });
+  return { raw, rolled };
+}
+
+function startNewDraft(raceKey) {
+  raceKey = raceKey || draft.race;
+  draft.race        = raceKey;
+  draft.rerollsLeft = MAX_REROLLS;
+  const { raw, rolled } = rollStats(raceKey);
+  draft.rawRolls    = raw;
+  draft.rolledStats = rolled;
+  draft.stats       = { ...rolled };
+  draft.polish      = raceKey === "human" ? POLISH_HUMAN : POLISH_BASE;
+  draft.cls         = null;
+  render();
+}
+
+/* ════════════════════════════════════════════════════════════
+   ACTIONS
+   ════════════════════════════════════════════════════════════ */
+function selectRace(raceKey) {
+  draft.race = raceKey;
+  // Reapply the new race's modifiers to the SAME raw dice rolls — no new
+  // dice thrown, reroll counter unchanged. Only the racial lens shifts.
+  const mods = RACES[raceKey].mods;
+  const rolled = {};
+  ["str","dex","con","int","wis"].forEach(s => {
+    rolled[s] = Math.min(18, Math.max(6, draft.rawRolls[s] + mods[s]));
+  });
+  draft.rolledStats = rolled;
+  draft.stats       = { ...rolled };
+  draft.polish      = raceKey === "human" ? POLISH_HUMAN : POLISH_BASE;
+  draft.cls         = null;
+  render();
+}
+
+function rerollStats() {
+  if (draft.rerollsLeft <= 0) return;
+  draft.rerollsLeft--;
+  const { raw, rolled } = rollStats(draft.race);
+  draft.rawRolls    = raw;
+  draft.rolledStats = rolled;
+  draft.stats       = { ...rolled };
+  draft.polish      = draft.race === "human" ? POLISH_HUMAN : POLISH_BASE;
+  draft.cls         = null;
+  setStatus("Stats rerolled. " + draft.rerollsLeft + " reroll" + (draft.rerollsLeft !== 1 ? "s" : "") + " remaining.", "ok");
+  render();
+}
+
+function resetPolish() {
+  // Returns all polish spending without burning a reroll.
+  draft.stats  = { ...draft.rolledStats };
+  draft.polish = draft.race === "human" ? POLISH_HUMAN : POLISH_BASE;
+  draft.cls    = null;
+  setStatus("Polish reset — rolled values restored.", "ok");
+  render();
+}
+
+function adjustStat(stat, delta) {
+  const cur      = draft.stats[stat];
+  const floorVal = draft.rolledStats[stat]; // can't push below what was rolled
+  if (delta > 0) {
+    if (draft.polish <= 0) return;
+    if (cur >= 18) return;
+    draft.stats[stat] = cur + 1;
+    draft.polish--;
+  } else {
+    if (cur <= floorVal) return; // only polish points can be taken back
+    draft.stats[stat] = cur - 1;
+    draft.polish++;
+  }
+  if (draft.cls && draft.stats[CLASSES[draft.cls].req.stat] < CLASSES[draft.cls].req.min) {
+    draft.cls = null;
+  }
+  render();
+}
+
+function qualifies(clsKey) {
+  const req = CLASSES[clsKey].req;
+  return draft.stats[req.stat] >= req.min;
+}
+
+function selectClass(clsKey) {
+  if (!qualifies(clsKey)) return;
+  draft.cls = clsKey;
+  render();
+}
+
+function computePreview() {
+  if (!draft.cls) return null;
+  const cls    = CLASSES[draft.cls];
+  const conMod = statMod(draft.stats.con);
+  const atkMod = statMod(draft.stats[cls.atkStat]);
+  const strMod = statMod(draft.stats.str);
+  const dexMod = statMod(draft.stats.dex);
+  const hp     = Math.max(1, cls.hitDie + conMod);
+  const ac     = STARTING_ARMOR_AC[draft.cls] - dexMod;
+  const atk    = classBaseAtkL1(draft.cls) + atkMod;
+  const dmgBase  = cls.weapon.dice;
+  const dmgBonus = dmgBase[2] + strMod;
+  const dmgLabel = dmgBonus !== 0
+    ? (dmgBase[0] + "d" + dmgBase[1] + (dmgBonus > 0 ? "+" + dmgBonus : dmgBonus))
+    : (dmgBase[0] + "d" + dmgBase[1]);
+  return { hp, ac, atk, dmgLabel, weaponName: cls.weapon.name, row: cls.row };
+}
+
+function addToParty() {
+  if (party.length >= 6) { setStatus("Party is full (6/6).", "err"); return; }
+  const name = document.getElementById("name-input").value.trim();
+  if (!name) { setStatus("Enter a name first.", "err"); return; }
+  if (!draft.cls) { setStatus("Choose a qualifying class.", "err"); return; }
+  const preview = computePreview();
+  const cls     = CLASSES[draft.cls];
+  party.push({
+    id: nextId++, name,
+    race: RACES[draft.race].label, cls: cls.label,
+    row: preview.row, level: 1,
+    hp: preview.hp, maxHp: preview.hp,
+    ac: preview.ac, atk: preview.atk,
+    dmgLabel: preview.dmgLabel, weaponName: preview.weaponName,
+    stats: { ...draft.stats },
+  });
+  setStatus(name + " the " + RACES[draft.race].label + " " + cls.label + " joins the party!", "ok");
+  document.getElementById("name-input").value = "";
+  startNewDraft(draft.race);
+}
+
+function removeFromParty(id) {
+  party = party.filter(p => p.id !== id);
+  render();
+}
+
+function beginAdventure() {
+  const log = document.getElementById("begin-log");
+  if (!party.length) { log.textContent = "Create at least one character first."; return; }
+  log.textContent = "Party of " + party.length + " assembled: " +
+    party.map(p => p.name).join(", ") + ". (Dungeon hookup comes next.)";
+}
+
+function setStatus(text, cls) {
+  const el = document.getElementById("status-log");
+  el.textContent = text;
+  el.className   = cls || "";
+}
+
+/* ════════════════════════════════════════════════════════════
+   RENDER
+   ════════════════════════════════════════════════════════════ */
+function renderRaceButtons() {
+  document.getElementById("race-buttons").innerHTML =
+    Object.keys(RACES).map(key => {
+      const sel = draft.race === key ? "selected" : "";
+      return '<button class="cmd ' + sel + '" onclick="selectRace(\'' + key + '\')">' +
+        RACES[key].label.toUpperCase() + '</button>';
+    }).join("");
+}
+
+function renderStatTable() {
+  const labels = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS" };
+  const raceMods = RACES[draft.race].mods;
+  let rows = "";
+  Object.keys(labels).forEach(stat => {
+    const val      = draft.stats[stat];
+    const floor    = draft.rolledStats[stat];
+    const raw      = draft.rawRolls[stat];
+    const mod      = raceMods[stat];
+    const modStr   = mod === 0 ? "" : (mod > 0 ? " <span style='color:var(--green)'>(+" + mod + ")</span>" : " <span style='color:var(--amber)'>(" + mod + ")</span>");
+    const rollNote = '<span style="color:var(--green-dim); font-size:0.8rem"> rolled ' + raw + modStr + '</span>';
+    const canDown  = val > floor;
+    const canUp    = draft.polish > 0 && val < 18;
+    rows += '<tr>' +
+      '<td class="stat-name">' + labels[stat] + '</td>' +
+      '<td class="stat-val">' + val + '</td>' +
+      '<td class="stat-mod">(' + fmtMod(statMod(val)) + ')</td>' +
+      '<td class="stat-btns">' +
+        '<button class="cmd small" onclick="adjustStat(\'' + stat + '\',-1)" ' + (canDown ? '' : 'disabled') + '>-</button> ' +
+        '<button class="cmd small" onclick="adjustStat(\'' + stat + '\', 1)" ' + (canUp   ? '' : 'disabled') + '>+</button>' +
+      '</td>' +
+      '<td style="padding-left:10px">' + rollNote + '</td>' +
+      '</tr>';
+  });
+  document.getElementById("stat-table").innerHTML = rows;
+
+  // update pool readout
+  const rerollsLeft = draft.rerollsLeft;
+  document.getElementById("pool-amount").textContent = draft.polish;
+  const rerollBtn = document.getElementById("reroll-btn");
+  if (rerollBtn) {
+    rerollBtn.textContent = "REROLL STATS (" + rerollsLeft + " left)";
+    rerollBtn.disabled    = rerollsLeft <= 0;
+  }
+}
+
+function renderClassButtons() {
+  document.getElementById("class-buttons").innerHTML =
+    Object.keys(CLASSES).map(key => {
+      const ok  = qualifies(key);
+      const sel = draft.cls === key ? "selected" : "";
+      return '<button class="cmd ' + sel + '" ' + (ok ? '' : 'disabled') +
+        ' onclick="selectClass(\'' + key + '\')">' + CLASSES[key].label.toUpperCase() + '</button>';
+    }).join("");
+}
+
+function renderPreview() {
+  const el = document.getElementById("preview-box");
+  const p  = computePreview();
+  if (!p) { el.innerHTML = '<span class="empty-note">Choose a qualifying class to preview stats.</span>'; return; }
+  el.innerHTML =
+    'HP <span style="color:var(--green)">' + p.hp + '</span> &nbsp; ' +
+    'AC <span style="color:var(--green)">' + p.ac + '</span> &nbsp; ' +
+    'ATK <span style="color:var(--green)">' + (p.atk >= 0 ? "+" + p.atk : p.atk) + '</span> &nbsp; ' +
+    'WEAPON <span style="color:var(--green)">' + p.weaponName + ' (' + p.dmgLabel + ')</span> &nbsp; ' +
+    'ROW <span style="color:var(--green)">' + p.row.toUpperCase() + '</span>';
+}
+
+function renderRoster() {
+  document.getElementById("roster-count").textContent = party.length;
+  const el = document.getElementById("roster-table");
+  if (!party.length) {
+    el.innerHTML = '<tr><td class="empty-note">No characters yet — build one above.</td></tr>';
+    return;
+  }
+  let rows = '<tr><th></th><th>NAME</th><th>RACE/CLASS</th><th>HP</th><th>AC</th><th>ATK</th><th>ROW</th><th></th></tr>';
+  party.forEach((p, i) => {
+    rows += '<tr>' +
+      '<td>' + (i+1) + '.</td>' +
+      '<td>' + p.name + '</td>' +
+      '<td>' + p.race + ' ' + p.cls + '</td>' +
+      '<td>' + p.hp + '/' + p.maxHp + '</td>' +
+      '<td>' + p.ac + '</td>' +
+      '<td>' + (p.atk >= 0 ? "+"+p.atk : p.atk) + '</td>' +
+      '<td>' + p.row.toUpperCase() + '</td>' +
+      '<td><button class="cmd small danger" onclick="removeFromParty(' + p.id + ')">REMOVE</button></td>' +
+      '</tr>';
+  });
+  el.innerHTML = rows;
+}
+
+function render() {
+  renderRaceButtons();
+  renderStatTable();
+  renderClassButtons();
+  renderPreview();
+  renderRoster();
+  document.getElementById("add-btn").disabled = party.length >= 6;
+}
+
+/* ════════════════════════════════════════════════════════════
+   STARTUP
+   ════════════════════════════════════════════════════════════ */
+startNewDraft("human");
+</script>
+</body>
+</html>

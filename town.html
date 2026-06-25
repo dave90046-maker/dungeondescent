@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dungeon Descent — Town of Ironhaven</title>
+<style>
+  :root {
+    --bg: #000; --line: #0a3d0a; --green: #00ff00; --green-dim: #1f9e1f;
+    --amber: #ffb000; --red: #ff4d4d; --red-dim: #a02828; --blue: #7fd1ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--green);
+    font-family: "Courier New", Courier, monospace; font-size: 18px;
+    -webkit-user-select: none; user-select: none;
+  }
+  #wrap { max-width: 900px; margin: 0 auto; padding: 18px 16px 40px; }
+
+  .title-bar { text-align: center; margin-bottom: 10px; }
+  .title-bar h1 {
+    font-size: 1.6rem; letter-spacing: 0.3em; text-transform: uppercase;
+    margin: 0; color: var(--green); text-shadow: 0 0 8px var(--green); font-weight: normal;
+  }
+  .title-bar .sub { color: var(--green-dim); letter-spacing: 0.2em; font-size: 0.85rem; }
+
+  .frame { border: 2px solid var(--green); box-shadow: 0 0 12px var(--green); background: #000; padding: 10px 14px; margin-bottom: 10px; }
+  .frame-label { color: var(--green-dim); font-size: 0.85rem; letter-spacing: 0.15em; margin-bottom: 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+
+  .town-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border: 2px solid var(--green); box-shadow: 0 0 12px var(--green); margin-bottom: 10px; }
+  .gold-amt { color: var(--amber); text-shadow: 0 0 4px var(--amber); font-size: 1.1rem; }
+
+  .nav-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+  button.cmd {
+    font-family: "Courier New", Courier, monospace; font-size: 16px; background: #000;
+    color: var(--green); border: 2px solid var(--green); border-radius: 4px;
+    box-shadow: 0 0 6px var(--green); padding: 7px 12px; cursor: pointer;
+    letter-spacing: 1px; touch-action: manipulation; transition: background 0.08s;
+  }
+  button.cmd:hover:not(:disabled), button.cmd:active:not(:disabled) { background: #003300; }
+  button.cmd:disabled { color: var(--line); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
+  button.cmd.selected { background: var(--green); color: #000; box-shadow: none; }
+  button.cmd.primary { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  button.cmd.primary:hover:not(:disabled) { background: #332200; }
+  button.cmd.danger { border-color: var(--red); color: var(--red); box-shadow: 0 0 6px var(--red); }
+  button.cmd.danger:hover:not(:disabled) { background: #330000; }
+  button.cmd.heal { border-color: var(--blue); color: var(--blue); box-shadow: 0 0 6px var(--blue); }
+  button.cmd.heal:hover:not(:disabled) { background: #001a33; }
+  button.cmd.small { font-size: 13px; padding: 3px 8px; }
+
+  /* Party strip */
+  .party-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+  .party-card { border: 2px solid var(--line); padding: 7px 10px; cursor: pointer; transition: border-color 0.1s, box-shadow 0.1s; }
+  .party-card:hover { border-color: var(--green-dim); }
+  .party-card.psel { border-color: var(--green); box-shadow: 0 0 8px var(--green); }
+  .party-card.pdown { border-color: var(--red-dim); }
+  .pname { font-size: 1rem; margin-bottom: 2px; }
+  .pinfo { font-size: 0.78rem; color: var(--green-dim); }
+  .pdown .pname { color: var(--red); }
+  .pdown .pinfo { color: var(--red-dim); }
+
+  .hp-bar { display: inline-block; width: 65px; height: 7px; border: 1px solid var(--green); vertical-align: middle; margin: 0 3px; }
+  .hp-fill { height: 100%; background: var(--green); }
+  .hp-fill.low { background: var(--amber); } .hp-fill.crit { background: var(--red); }
+  .xp-bar { display: inline-block; width: 65px; height: 5px; border: 1px solid var(--line); vertical-align: middle; margin: 0 3px; background: #001100; }
+  .xp-fill { height: 100%; background: var(--green-dim); }
+
+  /* Shop */
+  .char-sel { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .filter-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 17px; }
+  table.items th { color: var(--green-dim); font-weight: normal; font-size: 0.78rem; letter-spacing: 1px; border-bottom: 1px solid var(--line); padding: 2px 6px; text-align: left; }
+  table.items td { padding: 4px 6px; vertical-align: middle; }
+  table.items tr.cant-use td { color: var(--line); }
+  table.items tr.is-equipped td { color: var(--amber); }
+  .tier-badge { font-size: 0.72rem; color: var(--green-dim); border: 1px solid var(--line); padding: 0 3px; }
+  .equipped-section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .equip-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .equip-lbl { width: 70px; color: var(--green-dim); font-size: 0.85rem; }
+  .equip-name { flex: 1; }
+
+  /* Training */
+  .train-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .train-name { min-width: 100px; }
+  .xp-info { flex: 1; font-size: 0.82rem; color: var(--green-dim); }
+
+  /* Temple */
+  .temple-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+
+  /* Tavern */
+  .recruit-card { border: 1px solid var(--line); padding: 8px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+  #log { min-height: 24px; font-size: 15px; color: var(--green-dim); margin-top: 6px; }
+  #log.ok { color: var(--green); text-shadow: 0 0 3px var(--green); }
+  #log.err { color: var(--red); }
+  #log.info { color: var(--blue); }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: var(--green); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="title-bar">
+    <h1>Dungeon Descent</h1>
+    <div class="sub">— town of ironhaven —</div>
+  </div>
+  <div class="town-header">
+    <div>TOWN OF IRONHAVEN</div>
+    <div>GOLD: <span class="gold-amt" id="gold-display">0</span> gp</div>
+  </div>
+  <div class="nav-tabs" id="nav-tabs"></div>
+  <div class="frame" id="content-area"></div>
+  <div class="frame">
+    <div class="frame-label">PARTY</div>
+    <div class="party-strip" id="party-strip"></div>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ── DICE & MATH ─────────────────────────────────────────── */
+function roll(n, s) { let t=0; for(let i=0;i<n;i++) t+=1+Math.floor(Math.random()*s); return t; }
+function statMod(v)  { return Math.floor((v-10)/2); }
+function fmtMod(m)   { return m>=0?'+'+m:String(m); }
+
+/* ── PROGRESSION TABLES ──────────────────────────────────── */
+const XP_TABLE  = [0,1000,2500,5000,10000,20000,40000,80000,160000,320000];
+const HIT_DIE   = { fighter:10, thief:8, priest:8, mage:4 };
+const ATK_STAT  = { fighter:'str', thief:'dex', priest:'str', mage:'str' };
+const MAGE_SPELLS   = {1:'Magic Missile',3:'Sleep',5:'Fireball',7:'Lightning Bolt',9:'Death Spell'};
+const PRIEST_SPELLS = {1:'Cure Light Wounds',3:'Bless',5:'Cure Serious Wounds',7:'Dispel Undead',9:'Heal'};
+
+function xpForLevel(lv) { return (lv>=1&&lv<=10) ? XP_TABLE[lv-1] : Infinity; }
+function isCaster(cls)  { return cls==='mage'||cls==='priest'; }
+function castStatMod(c) { return statMod(c.cls==='mage' ? c.stats.int : c.stats.wis); }
+function spellUsesMax(c){ return 3 + Math.floor(c.level/2) + castStatMod(c); }
+function atkBonus(c) {
+  const base = c.cls==='fighter' ? c.level
+             : c.cls==='thief'   ? Math.floor(c.level*0.75)
+             : c.cls==='priest'  ? Math.floor(c.level/2)
+             :                     Math.floor(c.level/3);
+  return base + statMod(c.stats[ATK_STAT[c.cls]]);
+}
+function canLevelUp(c) {
+  return c.level<10 && c.xp>=xpForLevel(c.level+1) && c.status==='active';
+}
+function xpPct(c) {
+  const cur=xpForLevel(c.level), next=xpForLevel(c.level+1);
+  if(next===Infinity) return 100;
+  return Math.min(100, Math.floor(((c.xp-cur)/(next-cur))*100));
+}
+
+/* ── ITEM CATALOG ────────────────────────────────────────── */
+const WEAPONS = [
+  {id:'dagger',    name:'Dagger',            dmg:'1d4',   tier:1, price:30,  usable:['fighter','thief','priest','mage']},
+  {id:'shortsword',name:'Short Sword',       dmg:'1d6',   tier:1, price:50,  usable:['fighter','thief']},
+  {id:'mace',      name:'Mace',              dmg:'1d6+1', tier:1, price:60,  usable:['fighter','priest']},
+  {id:'longsword', name:'Long Sword',        dmg:'1d8',   tier:2, price:150, usable:['fighter','thief']},
+  {id:'warmace',   name:'War Mace',          dmg:'1d8+1', tier:2, price:180, usable:['fighter','priest']},
+  {id:'handaxe',   name:'Hand Axe',          dmg:'1d6+2', tier:2, price:120, usable:['fighter']},
+  {id:'silverls',  name:'Silver Long Sword', dmg:'1d8+2', tier:3, price:400, usable:['fighter','thief']},
+  {id:'battleaxe', name:'Battle Axe',        dmg:'2d6',   tier:3, price:500, usable:['fighter']},
+  {id:'flail',     name:'Flail',             dmg:'1d10',  tier:3, price:450, usable:['fighter','priest']},
+];
+const ARMORS = [
+  {id:'robes',   name:'Robes',          ac:9, tier:1, price:20,   usable:['mage','priest']},
+  {id:'leather', name:'Leather Armor',  ac:8, tier:1, price:40,   usable:['fighter','thief','priest']},
+  {id:'studded', name:'Studded Leather',ac:7, tier:2, price:100,  usable:['fighter','thief','priest']},
+  {id:'chain',   name:'Chainmail',      ac:6, tier:2, price:200,  usable:['fighter','priest']},
+  {id:'banded',  name:'Banded Mail',    ac:4, tier:3, price:600,  usable:['fighter','priest']},
+  {id:'plate',   name:'Plate Mail',     ac:3, tier:3, price:1000, usable:['fighter']},
+];
+
+function itemById(id,list)  { return list.find(x=>x.id===id)||null; }
+function canUse(cls,item)   { return item.usable.includes(cls); }
+function sellPrice(item)    { return Math.floor(item.price/2); }
+
+/* ── STATE ───────────────────────────────────────────────── */
+let gold         = 750;
+let activeTab    = 'shop';
+let shopFilter   = 'weapons';
+let selectedId   = 'tor';
+let hireCounter  = 0;
+
+let party = [
+  { id:'tor',    name:'Tor',    race:'Human',  cls:'fighter', clsLabel:'Fighter',
+    level:1, xp:950,  hp:18, maxHp:18, ac:4,
+    stats:{str:14,dex:14,con:15,int:8, wis:10}, status:'active',
+    weapon:{...itemById('shortsword',WEAPONS)}, armor:{...itemById('leather',ARMORS)},
+    spells:[], spellUses:0, spellUsesMax:0 },
+  { id:'shadow', name:'Shadow', race:'Hobbit', cls:'thief',   clsLabel:'Thief',
+    level:1, xp:1100, hp:10, maxHp:10, ac:5,
+    stats:{str:11,dex:14,con:12,int:12,wis:9},  status:'active',
+    weapon:{...itemById('dagger',WEAPONS)},      armor:{...itemById('leather',ARMORS)},
+    spells:[], spellUses:0, spellUsesMax:0 },
+  { id:'aldric', name:'Aldric', race:'Human',  cls:'priest',  clsLabel:'Priest',
+    level:2, xp:2200, hp:12, maxHp:12, ac:6,
+    stats:{str:12,dex:12,con:13,int:11,wis:16}, status:'active',
+    weapon:{...itemById('mace',WEAPONS)}, armor:{...itemById('chain',ARMORS)},
+    spells:['Cure Light Wounds'], spellUses:3, spellUsesMax:7 },
+  { id:'mialee', name:'Mialee', race:'Elf',    cls:'mage',    clsLabel:'Mage',
+    level:1, xp:350,  hp:0,  maxHp:7,  ac:9,
+    stats:{str:10,dex:10,con:8, int:16,wis:10}, status:'down',
+    weapon:{...itemById('dagger',WEAPONS)}, armor:{...itemById('robes',ARMORS)},
+    spells:['Magic Missile'], spellUses:0, spellUsesMax:6 },
+];
+
+let recruits = [
+  {id:'r1',name:'Gareth', race:'Human', cls:'fighter',clsLabel:'Fighter',stats:{str:16,dex:11,con:14,int:9, wis:10},cost:100},
+  {id:'r2',name:'Lyra',   race:'Elf',   cls:'mage',   clsLabel:'Mage',   stats:{str:8, dex:13,con:7, int:15,wis:10},cost:100},
+  {id:'r3',name:'Brock',  race:'Dwarf', cls:'fighter',clsLabel:'Fighter',stats:{str:15,dex:9, con:16,int:7, wis:10},cost:100},
+  {id:'r4',name:'Pip',    race:'Hobbit',cls:'thief',  clsLabel:'Thief',  stats:{str:7, dex:16,con:9, int:11,wis:12},cost:100},
+];
+
+/* ── HELPERS ─────────────────────────────────────────────── */
+function getChar(id)   { return party.find(p=>p.id===id); }
+function selChar()     { return getChar(selectedId); }
+function hpCls(c)      { if(!c.hp||c.hp<=0) return 'crit'; const r=c.hp/c.maxHp; return r<=0.3?'crit':r<=0.6?'low':''; }
+
+/* ── ACTIONS ─────────────────────────────────────────────── */
+function setLog(msg,cls) { const el=document.getElementById('log'); el.textContent=msg; el.className=cls||''; }
+function selectTab(t)    { activeTab=t; setLog(''); render(); }
+function setFilter(f)    { shopFilter=f; render(); }
+function selectChar(id)  { selectedId=id; render(); }
+
+function buyItem(itemId, listName) {
+  const list = listName==='weapons' ? WEAPONS : ARMORS;
+  const item = itemById(itemId, list);
+  const c = selChar();
+  if (!item||!c) return;
+  if (c.status==='down')     { setLog(c.name+' is down — visit the Temple first.','err'); return; }
+  if (!canUse(c.cls,item))   { setLog(c.clsLabel+'s cannot use '+item.name+'.','err'); return; }
+  if (gold < item.price)     { setLog('Need '+(item.price-gold)+' more gold.','err'); return; }
+
+  const slot = listName==='weapons' ? 'weapon' : 'armor';
+  const old  = c[slot];
+  let credit=0, creditNote='';
+  if (old && old.id!==item.id) {
+    credit     = sellPrice(old);
+    creditNote = ' (traded in '+old.name+' +'+credit+'gp)';
+  }
+  gold -= item.price;
+  gold += credit;
+  c[slot] = {...item};
+  if (listName==='armor') c.ac = item.ac - statMod(c.stats.dex);
+  setLog(c.name+' bought '+item.name+' for '+item.price+'gp.'+creditNote,'ok');
+  render();
+}
+
+function sellItem(charId, slot) {
+  const c = getChar(charId);
+  if (!c||!c[slot]) return;
+  const sp = sellPrice(c[slot]);
+  const nm = c[slot].name;
+  gold += sp;
+  c[slot] = null;
+  if (slot==='armor') c.ac = 10;
+  setLog(c.name+' sold '+nm+' for '+sp+'gp.','ok');
+  render();
+}
+
+function resurrect(charId) {
+  const c = getChar(charId);
+  if (!c||c.status!=='down') return;
+  const cost = c.level * 300;
+  if (gold < cost) { setLog('Need '+cost+'gp to resurrect '+c.name+'. Short '+(cost-gold)+'gp.','err'); return; }
+  gold -= cost;
+  c.hp     = Math.max(1, Math.floor(c.maxHp/2));
+  c.status = 'active';
+  if (isCaster(c.cls)) c.spellUses = Math.floor(c.spellUsesMax/2);
+  setLog(c.name+' resurrected at '+c.hp+' HP. Cost: '+cost+'gp.','ok');
+  render();
+}
+
+function rest() {
+  const cost   = 50;
+  const active = party.filter(c=>c.status==='active');
+  if (!active.length)  { setLog('No active party members to rest.','err'); return; }
+  if (gold < cost)     { setLog('Need '+cost+'gp to rest at the inn.','err'); return; }
+  const alreadyFull = active.every(c=>c.hp===c.maxHp && (!isCaster(c.cls)||c.spellUses===c.spellUsesMax));
+  if (alreadyFull)     { setLog('Everyone is already at full strength.','err'); return; }
+  gold -= cost;
+  active.forEach(c => {
+    c.hp = c.maxHp;
+    if (isCaster(c.cls)) c.spellUses = c.spellUsesMax;
+  });
+  setLog('The party rests. HP and spell uses fully restored. Cost: '+cost+'gp.','ok');
+  render();
+}
+
+function levelUp(charId) {
+  const c = getChar(charId);
+  if (!c||!canLevelUp(c)) return;
+  c.level++;
+  const hpGain = Math.max(1, roll(1,HIT_DIE[c.cls]) + statMod(c.stats.con));
+  c.maxHp += hpGain;
+  c.hp    += hpGain;
+  if (isCaster(c.cls)) {
+    c.spellUsesMax = spellUsesMax(c);
+    c.spellUses    = c.spellUsesMax; // full uses on level-up
+  }
+  const tbl = c.cls==='mage' ? MAGE_SPELLS : PRIEST_SPELLS;
+  const newSpell = tbl[c.level];
+  let spellNote = '';
+  if (newSpell && !c.spells.includes(newSpell)) {
+    c.spells.push(newSpell);
+    spellNote = ' New spell: '+newSpell+'!';
+  }
+  setLog(c.name+' advances to level '+c.level+'! +'+hpGain+' HP.'+spellNote,'ok');
+  render();
+}
+
+function hire(recruitId) {
+  if (party.length>=6) { setLog('Party is full (6/6).','err'); return; }
+  const r = recruits.find(x=>x.id===recruitId);
+  if (!r) return;
+  if (gold<r.cost) { setLog('Need '+r.cost+'gp to hire '+r.name+'.','err'); return; }
+  gold -= r.cost;
+  hireCounter++;
+  const conM = statMod(r.stats.con);
+  const hp   = Math.max(1, HIT_DIE[r.cls]+conM);
+  const dexM = statMod(r.stats.dex);
+  const ac   = (r.cls==='mage'?9:8) - dexM;
+  const spMax= isCaster(r.cls) ? 3+statMod(r.cls==='mage'?r.stats.int:r.stats.wis) : 0;
+  const startW = r.cls==='priest' ? itemById('mace',WEAPONS) : r.cls==='fighter' ? itemById('shortsword',WEAPONS) : itemById('dagger',WEAPONS);
+  const startA = r.cls==='mage' ? itemById('robes',ARMORS) : itemById('leather',ARMORS);
+  party.push({
+    id:'hire'+hireCounter, name:r.name, race:r.race, cls:r.cls, clsLabel:r.clsLabel,
+    level:1, xp:0, hp, maxHp:hp, ac,
+    stats:{...r.stats}, status:'active',
+    weapon:{...startW}, armor:{...startA},
+    spells: r.cls==='mage'?['Magic Missile']:r.cls==='priest'?['Cure Light Wounds']:[],
+    spellUses:spMax, spellUsesMax:spMax,
+  });
+  recruits = recruits.filter(x=>x.id!==recruitId);
+  setLog(r.name+' the '+r.race+' '+r.clsLabel+' hired for '+r.cost+'gp.','ok');
+  render();
+}
+
+/* ── RENDER ──────────────────────────────────────────────── */
+function renderGold() {
+  document.getElementById('gold-display').textContent = gold.toLocaleString();
+}
+
+function renderNav() {
+  const tabs=[
+    {id:'shop',label:'SHOP'},{id:'temple',label:'TEMPLE'},
+    {id:'inn',label:'INN'},{id:'training',label:'TRAINING'},
+    {id:'tavern',label:'TAVERN'},{id:'dungeon',label:'ENTER DUNGEON',extra:'primary'},
+  ];
+  document.getElementById('nav-tabs').innerHTML = tabs.map(t=>{
+    const sel = activeTab===t.id?'selected':'';
+    return '<button class="cmd '+(t.extra||'')+' '+sel+'" onclick="selectTab(\''+t.id+'\')">'+t.label+'</button>';
+  }).join('');
+}
+
+function renderPartyStrip() {
+  document.getElementById('party-strip').innerHTML = party.map(c=>{
+    const sel  = selectedId===c.id ? 'psel' : '';
+    const down = c.status==='down' ? 'pdown' : '';
+    const hpPct = Math.max(0, Math.round((c.hp/c.maxHp)*100));
+    const downTag = c.status==='down' ? ' <span style="color:var(--red)">[DOWN]</span>' : '';
+    const lvlTag  = canLevelUp(c) ? ' <span style="color:var(--amber)">▲</span>' : '';
+    const spLine  = isCaster(c.cls)
+      ? '<br><span style="color:var(--blue);font-size:0.75rem">SP '+c.spellUses+'/'+c.spellUsesMax+'</span>' : '';
+    return '<div class="party-card '+sel+' '+down+'" onclick="selectChar(\''+c.id+'\')">' +
+      '<div class="pname">'+c.name+downTag+'</div>' +
+      '<div class="pinfo">Lv'+c.level+' '+c.race+' '+c.clsLabel+lvlTag+'</div>' +
+      '<div class="pinfo" style="margin-top:3px">HP <span class="hp-bar"><span class="hp-fill '+hpCls(c)+'" style="width:'+hpPct+'%"></span></span> '+c.hp+'/'+c.maxHp+spLine+'</div>' +
+      '<div class="pinfo"><span class="xp-bar"><span class="xp-fill" style="width:'+xpPct(c)+'%"></span></span> '+c.xp.toLocaleString()+' xp</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderShop() {
+  const c    = selChar();
+  const list = shopFilter==='weapons' ? WEAPONS : ARMORS;
+  const slot = shopFilter==='weapons' ? 'weapon' : 'armor';
+  let h = '<div class="frame-label">IRONHAVEN ARMORY</div>';
+
+  // char selector
+  h += '<div class="char-sel">'+party.map(p=>{
+    const s=selectedId===p.id?'selected':'';
+    const d=p.status==='down'?'disabled':'';
+    return '<button class="cmd small '+s+'" '+d+' onclick="selectChar(\''+p.id+'\')" >'+p.name.toUpperCase()+'</button>';
+  }).join('')+'</div>';
+
+  // filter
+  h += '<div class="filter-tabs">'+['weapons','armor'].map(f=>
+    '<button class="cmd small'+(shopFilter===f?' selected':'')+'" onclick="setFilter(\''+f+'\')">'+f.toUpperCase()+'</button>'
+  ).join('')+'</div>';
+
+  // item list
+  h += '<table class="items"><tr><th>ITEM</th><th>STAT</th><th></th><th>PRICE</th><th></th></tr>';
+  list.forEach(item=>{
+    const usable   = c ? canUse(c.cls,item) : false;
+    const equipped = c && c[slot] && c[slot].id===item.id;
+    const rowCls   = equipped?'is-equipped':(!usable?'cant-use':'');
+    const stat     = shopFilter==='weapons' ? item.dmg : 'AC '+item.ac;
+    const btnLbl   = equipped?'EQUIPPED':'BUY';
+    const btnDis   = (!c||!usable||equipped||c.status==='down')?'disabled':'';
+    h += '<tr class="'+rowCls+'">'+
+      '<td>'+item.name+'</td><td>'+stat+'</td>'+
+      '<td><span class="tier-badge">T'+item.tier+'</span></td>'+
+      '<td>'+item.price+'gp</td>'+
+      '<td><button class="cmd small" '+btnDis+' onclick="buyItem(\''+item.id+'\',\''+shopFilter+'\')">'+btnLbl+'</button></td>'+
+    '</tr>';
+  });
+  h += '</table>';
+
+  // equipped / sell
+  if (c) {
+    h += '<div class="equipped-section"><div class="frame-label" style="margin-top:0">EQUIPPED — '+c.name.toUpperCase()+'</div>';
+    ['weapon','armor'].forEach(sl=>{
+      const eq = c[sl];
+      const stat = eq ? (sl==='weapon' ? eq.dmg : 'AC '+eq.ac) : '';
+      h += '<div class="equip-row">'+
+        '<span class="equip-lbl">'+sl.toUpperCase()+'</span>'+
+        '<span class="equip-name">'+(eq?eq.name+' ('+stat+')':'(none)')+'</span>'+
+        (eq?'<button class="cmd small danger" onclick="sellItem(\''+c.id+'\',\''+sl+'\')">SELL '+sellPrice(eq)+'gp</button>':'')+
+      '</div>';
+    });
+    h += '</div>';
+  }
+  document.getElementById('content-area').innerHTML = h;
+}
+
+function renderTemple() {
+  const down = party.filter(c=>c.status==='down');
+  let h = '<div class="frame-label">TEMPLE OF THE LIGHT</div>';
+  if (!down.length) {
+    h += '<p style="color:var(--green-dim)">All party members are on their feet. The priests nod approvingly.</p>';
+  } else {
+    h += '<p style="color:var(--green-dim)">Resurrection cost: 300gp × character level. Revived at half HP.</p>';
+    down.forEach(c=>{
+      const cost=c.level*300;
+      h += '<div class="temple-row">'+
+        '<span><span style="color:var(--red)">'+c.name+'</span>  Lv'+c.level+' '+c.clsLabel+'</span>'+
+        '<span style="color:var(--green-dim)">'+cost+'gp</span>'+
+        '<button class="cmd heal" '+(gold>=cost?'':'disabled')+' onclick="resurrect(\''+c.id+'\')">RESURRECT</button>'+
+      '</div>';
+    });
+    if (!party.some(c=>c.status==='active'))
+      h += '<p style="color:var(--red-dim)">Entire party is down — hire reinforcements from the Tavern.</p>';
+  }
+  document.getElementById('content-area').innerHTML = h;
+}
+
+function renderInn() {
+  const active  = party.filter(c=>c.status==='active');
+  const needRest= active.some(c=>c.hp<c.maxHp||(isCaster(c.cls)&&c.spellUses<c.spellUsesMax));
+  let h = '<div class="frame-label">THE RUSTY FLAGON INN</div>';
+  h += '<p style="color:var(--green-dim)">A night\'s rest costs <span style="color:var(--amber)">50gp</span> for the whole party.</p>';
+  h += '<p style="color:var(--green-dim)">Restores full HP and spell uses for all active members.</p>';
+  if (!needRest) h += '<p style="color:var(--green-dim)">Everyone is already at full strength.</p>';
+  active.forEach(c=>{
+    const hpOk  = c.hp===c.maxHp;
+    const spOk  = !isCaster(c.cls)||c.spellUses===c.spellUsesMax;
+    const dim   = hpOk&&spOk ? 'color:var(--line)' : 'color:var(--green-dim)';
+    const spPart= isCaster(c.cls) ? '  SP '+c.spellUses+'/'+c.spellUsesMax : '';
+    h += '<div style="'+dim+';margin-bottom:4px">'+c.name+' — HP '+c.hp+'/'+c.maxHp+spPart+'</div>';
+  });
+  h += '<div style="margin-top:10px"><button class="cmd primary" '+(gold<50||!needRest?'disabled':'')+' onclick="rest()">REST (50gp)</button></div>';
+  document.getElementById('content-area').innerHTML = h;
+}
+
+function renderTraining() {
+  let h = '<div class="frame-label">TRAINING GROUNDS</div>';
+  h += '<p style="color:var(--green-dim)">Visit here to advance when you have enough experience.</p>';
+  party.forEach(c=>{
+    const ready = canLevelUp(c);
+    const next  = xpForLevel(c.level+1);
+    const xpLeft= next===Infinity ? 'MAX LEVEL' : (next-c.xp).toLocaleString()+' xp to next level';
+    const pct   = xpPct(c);
+    const dimName = c.status==='down'?'color:var(--red)':'';
+    h += '<div class="train-row">'+
+      '<span class="train-name" style="'+dimName+'">'+c.name+'</span>'+
+      '<span class="xp-info">'+
+        'Lv'+c.level+' &nbsp; '+
+        '<span class="xp-bar"><span class="xp-fill" style="width:'+pct+'%"></span></span>'+
+        ' '+c.xp.toLocaleString()+' xp &nbsp; '+xpLeft+
+      '</span>'+
+      '<button class="cmd small primary" '+(ready?'':'disabled')+' onclick="levelUp(\''+c.id+'\')">' +
+        (c.level>=10?'MAX':(ready?'LEVEL UP ▲':'→ Lv'+(c.level+1)))+
+      '</button>'+
+    '</div>';
+  });
+  document.getElementById('content-area').innerHTML = h;
+}
+
+function renderTavern() {
+  let h = '<div class="frame-label">THE RUSTY FLAGON — TAVERN</div>';
+  if (!recruits.length) {
+    h += '<p style="color:var(--green-dim)">No adventurers available right now.</p>';
+  } else {
+    h += '<p style="color:var(--green-dim)">Hire fee: 100gp. New recruits come equipped with starting gear.</p>';
+    recruits.forEach(r=>{
+      const hp = Math.max(1, HIT_DIE[r.cls]+statMod(r.stats.con));
+      const ok = party.length<6 && gold>=r.cost;
+      h += '<div class="recruit-card">'+
+        '<div>'+
+          '<strong>'+r.name+'</strong> — '+r.race+' '+r.clsLabel+'<br>'+
+          '<span style="color:var(--green-dim);font-size:0.82rem">'+
+            'STR '+r.stats.str+' DEX '+r.stats.dex+' CON '+r.stats.con+
+            ' INT '+r.stats.int+' WIS '+r.stats.wis+' &nbsp; ~'+hp+' HP'+
+          '</span>'+
+        '</div>'+
+        '<button class="cmd primary" '+(ok?'':'disabled')+' onclick="hire(\''+r.id+'\')">HIRE '+r.cost+'gp</button>'+
+      '</div>';
+    });
+  }
+  if (party.length>=6) h += '<p style="color:var(--amber)">Party is full (6/6).</p>';
+  document.getElementById('content-area').innerHTML = h;
+}
+
+function renderDungeon() {
+  const active = party.filter(c=>c.status==='active');
+  let h = '<div class="frame-label">DUNGEON ENTRANCE — THE STAIRWAY DOWN</div>';
+  if (!active.length) {
+    h += '<p style="color:var(--red)">No active party members. Visit the Temple or Tavern first.</p>';
+  } else {
+    h += '<p style="color:var(--green-dim)">'+active.length+' adventurer'+(active.length!==1?'s':'')+' ready. The stairway descends into darkness.</p>';
+    h += '<div style="margin-top:10px"><button class="cmd primary" onclick="setLog(\'Dungeon integration coming once all screens are merged in Claude Code.\',\'info\')">DESCEND TO DUNGEON LEVEL 1</button></div>';
+  }
+  document.getElementById('content-area').innerHTML = h;
+}
+
+function render() {
+  renderGold();
+  renderNav();
+  renderPartyStrip();
+  switch(activeTab) {
+    case 'shop':     renderShop();     break;
+    case 'temple':   renderTemple();   break;
+    case 'inn':      renderInn();      break;
+    case 'training': renderTraining(); break;
+    case 'tavern':   renderTavern();   break;
+    case 'dungeon':  renderDungeon();  break;
+  }
+}
+
+render();
+</script>
+</body>
+</html>
