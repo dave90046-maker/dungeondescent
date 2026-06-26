@@ -12,48 +12,204 @@
       padding: 0;
     }
 
+    /* CSS custom properties shared by all screens */
+    :root {
+      --green:     #00ff00;
+      --green-dim: #1f9e1f;
+      --green-dk:  #0a3d0a;
+      --amber:     #ffb000;
+      --red:       #ff4d4d;
+      --red-dim:   #a02828;
+    }
+
     body {
       background: #000;
-      color: #00ff00;
+      color: var(--green);
       font-family: "Courier New", Courier, monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
       min-height: 100vh;
-      padding: 8px;
       /* Prevent tap-hold context menu on mobile */
       -webkit-user-select: none;
       user-select: none;
     }
+
+    /* ── Screen container ──
+       Every .screen div starts hidden.  showScreen() reveals exactly
+       one by setting display:flex.  Each screen fills the viewport
+       as a centred flex column, just like the original body layout. */
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      width: 100%;
+      min-height: 100vh;
+      padding: 8px;
+    }
+
+    /* ════════════════════════════════════════════════════════
+       PROFILE SCREEN STYLES
+       ════════════════════════════════════════════════════════ */
+
+    .profile-title {
+      font-size: 2rem;
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      text-shadow: 0 0 16px var(--green);
+      margin: 28px 0 6px;
+    }
+
+    .profile-sub {
+      color: var(--green-dim);
+      font-size: 0.8rem;
+      letter-spacing: 0.25em;
+      margin-bottom: 32px;
+    }
+
+    /* Framed section box (reused for new-game and saves list) */
+    .profile-frame {
+      border: 2px solid var(--green);
+      box-shadow: 0 0 12px var(--green);
+      padding: 16px 20px;
+      width: 100%;
+      max-width: 420px;
+      margin-bottom: 12px;
+    }
+
+    .profile-frame-label {
+      color: var(--green-dim);
+      font-size: 0.78rem;
+      letter-spacing: 0.15em;
+      border-bottom: 1px solid var(--green-dk);
+      padding-bottom: 6px;
+      margin-bottom: 14px;
+    }
+
+    .profile-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input#profile-name {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 16px;
+      background: #000;
+      color: var(--green);
+      border: 2px solid var(--green);
+      border-radius: 4px;
+      padding: 8px 10px;
+      flex: 1;
+      min-width: 0; /* allow flex shrink on small screens */
+    }
+    input#profile-name:focus {
+      outline: none;
+      box-shadow: 0 0 6px var(--green);
+    }
+    input#profile-name::placeholder {
+      color: var(--green-dk);
+    }
+
+    /* Profile screen command buttons */
+    button.pcmd {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 15px;
+      background: #000;
+      color: var(--green);
+      border: 2px solid var(--green);
+      border-radius: 4px;
+      box-shadow: 0 0 6px var(--green);
+      padding: 8px 14px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      touch-action: manipulation;
+      transition: background 0.08s;
+      white-space: nowrap;
+    }
+    button.pcmd:hover:not(:disabled),
+    button.pcmd:active:not(:disabled) { background: #003300; }
+    button.pcmd:disabled {
+      color: var(--green-dk);
+      border-color: var(--green-dk);
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+    button.pcmd.primary {
+      border-color: var(--amber);
+      color: var(--amber);
+      box-shadow: 0 0 6px var(--amber);
+    }
+    button.pcmd.primary:hover:not(:disabled) { background: #332200; }
+
+    button.pcmd.danger {
+      border-color: var(--red);
+      color: var(--red);
+      box-shadow: 0 0 4px var(--red);
+      font-size: 12px;
+      padding: 4px 9px;
+    }
+    button.pcmd.danger:hover:not(:disabled) { background: #330000; }
+
+    /* One row per existing save */
+    .save-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--green-dk);
+    }
+    .save-row:last-child { border-bottom: none; }
+
+    .save-name {
+      flex: 1;
+      font-size: 1rem;
+    }
+
+    /* Status / error line below the new-game input */
+    .profile-log {
+      min-height: 20px;
+      font-size: 14px;
+      margin-top: 10px;
+      color: var(--green-dim);
+    }
+    .profile-log.err { color: var(--red); }
+    .profile-log.ok  { color: var(--green); text-shadow: 0 0 3px var(--green); }
+
+    .profile-version {
+      color: var(--green-dk);
+      font-size: 0.72rem;
+      margin-top: auto;
+      padding: 24px 0 8px;
+      letter-spacing: 0.1em;
+    }
+
+    /* ════════════════════════════════════════════════════════
+       DUNGEON SCREEN STYLES  (unchanged from v2)
+       ════════════════════════════════════════════════════════ */
 
     h1 {
       font-size: 1.1rem;
       letter-spacing: 0.3em;
       text-transform: uppercase;
       margin-bottom: 6px;
-      text-shadow: 0 0 8px #00ff00;
+      text-shadow: 0 0 8px var(--green);
     }
 
-    /* ── The 3-D view canvas ── */
+    /* The 3-D view canvas */
     #view {
-      border: 2px solid #00ff00;
-      box-shadow: 0 0 12px #00ff00;
+      border: 2px solid var(--green);
+      box-shadow: 0 0 12px var(--green);
       display: block;
-      /* Canvas is square; we'll size it with JS */
       image-rendering: pixelated;
     }
 
-    /* ── Status bar below the canvas ── */
+    /* Status bar below the canvas */
     #status {
       margin-top: 6px;
       font-size: 0.85rem;
       letter-spacing: 0.1em;
     }
 
-    /* ── D-pad control grid ── */
-    /*
-     * Layout:
+    /* D-pad control grid
      *   [  ] [FWD] [  ]
      *   [LT] [  ] [RT]
      *   [  ] [BCK] [  ]
@@ -69,16 +225,15 @@
 
     .btn {
       background: #000;
-      color: #00ff00;
-      border: 2px solid #00ff00;
+      color: var(--green);
+      border: 2px solid var(--green);
       font-family: inherit;
       font-size: 1.2rem;
       padding: 16px 0;
       cursor: pointer;
       text-align: center;
       border-radius: 4px;
-      box-shadow: 0 0 6px #00ff00;
-      /* Prevent double-tap zoom on mobile */
+      box-shadow: 0 0 6px var(--green);
       touch-action: manipulation;
       transition: background 0.08s;
     }
@@ -88,14 +243,14 @@
       background: #003300;
     }
 
-    /* Empty cells in the grid — invisible spacer */
+    /* Invisible spacer cells in the D-pad grid */
     .btn-empty {
       visibility: hidden;
     }
 
-    /* ── Stair button — shown only when standing on a staircase ── */
+    /* Stair button — shown only when standing on a staircase */
     #stair-wrap {
-      display: none;           /* hidden by default; JS shows it */
+      display: none;
       width: 100%;
       max-width: 320px;
       margin-top: 6px;
@@ -110,50 +265,64 @@
 </head>
 <body>
 
-  <h1>Dungeon Descent</h1>
-
-  <!-- The 3-D wireframe view is drawn here -->
-  <canvas id="view"></canvas>
-
-  <!-- Level, coordinates and facing direction -->
-  <div id="status">LEVEL 1  X:0 Y:0  FACING:NORTH</div>
-
-  <!-- On-screen D-pad -->
-  <div id="controls">
-    <div class="btn btn-empty"></div>
-    <button class="btn" id="btn-fwd"  aria-label="Forward">&#9650;</button>
-    <div class="btn btn-empty"></div>
-
-    <button class="btn" id="btn-lt"   aria-label="Turn Left">&#9668;</button>
-    <div class="btn btn-empty"></div>
-    <button class="btn" id="btn-rt"   aria-label="Turn Right">&#9658;</button>
-
-    <div class="btn btn-empty"></div>
-    <button class="btn" id="btn-back" aria-label="Back">&#9660;</button>
-    <div class="btn btn-empty"></div>
+  <!-- ══════════════════════════════════════════════════════════
+       PROFILE SCREEN
+       Content is generated by renderProfileScreen().
+       Shown first on every page load.
+       ══════════════════════════════════════════════════════════ -->
+  <div id="screen-profile" class="screen">
   </div>
 
-  <!-- Stair button — text and visibility controlled by JS -->
-  <div id="stair-wrap">
-    <button class="btn" id="btn-stairs" aria-label="Use Stairs">DESCEND &#9660;</button>
-  </div>
+  <!-- ══════════════════════════════════════════════════════════
+       DUNGEON SCREEN
+       The first-person wireframe renderer from v1/v2, unchanged.
+       showScreen("dungeon") makes this visible.
+       ══════════════════════════════════════════════════════════ -->
+  <div id="screen-dungeon" class="screen">
 
+    <h1>Dungeon Descent</h1>
+
+    <!-- The 3-D wireframe view is drawn here -->
+    <canvas id="view"></canvas>
+
+    <!-- Level, coordinates and facing direction -->
+    <div id="status">LEVEL 1  X:0 Y:0  FACING:NORTH</div>
+
+    <!-- On-screen D-pad -->
+    <div id="controls">
+      <div class="btn btn-empty"></div>
+      <button class="btn" id="btn-fwd"  aria-label="Forward">&#9650;</button>
+      <div class="btn btn-empty"></div>
+
+      <button class="btn" id="btn-lt"   aria-label="Turn Left">&#9668;</button>
+      <div class="btn btn-empty"></div>
+      <button class="btn" id="btn-rt"   aria-label="Turn Right">&#9658;</button>
+
+      <div class="btn btn-empty"></div>
+      <button class="btn" id="btn-back" aria-label="Back">&#9660;</button>
+      <div class="btn btn-empty"></div>
+    </div>
+
+    <!-- Stair button — text and visibility controlled by JS -->
+    <div id="stair-wrap">
+      <button class="btn" id="btn-stairs" aria-label="Use Stairs">DESCEND &#9660;</button>
+    </div>
+
+  </div><!-- /screen-dungeon -->
+
+<!-- game.js must load before the inline script so GS, autoSave,
+     showScreen, etc. are defined when the dungeon code runs. -->
+<script src="game.js"></script>
 <script>
 "use strict";
 
 /* ════════════════════════════════════════════════════════════
    TILE CONSTANTS
    ════════════════════════════════════════════════════════════
-   These are the values you write into the map grid arrays.
-   Using named constants instead of bare numbers makes the
-   map arrays much easier to read when you design levels.
-
      0  TILE_FLOOR      — open, walkable passage
      1  TILE_WALL       — solid stone, blocks movement and view
-     2  TILE_STAIR_DOWN — staircase going DEEPER (to the next level)
-     3  TILE_STAIR_UP   — staircase going UP    (to the previous level)
-
-   To place stairs in a level, simply put a 2 or 3 in the grid.
+     2  TILE_STAIR_DOWN — staircase going DEEPER (next level)
+     3  TILE_STAIR_UP   — staircase going UP    (previous level)
 */
 const TILE_FLOOR      = 0;
 const TILE_WALL       = 1;
@@ -163,27 +332,18 @@ const TILE_STAIR_UP   = 3;
 /* ════════════════════════════════════════════════════════════
    DUNGEON LEVELS
    ════════════════════════════════════════════════════════════
-   LEVELS is an array of level objects.  Index 0 is the shallowest
-   level; the last index is the deepest.
+   LEVELS is an array of level objects.  Index 0 is the shallowest.
 
-   Each level object has:
+   Each level has:
+     name           — shown in the status bar
+     map            — 10×10 grid of tile values
+     entryFromAbove — {x, y, dir} landing spot when descending in
+     entryFromBelow — {x, y, dir} landing spot when ascending in
+                      (null on the deepest level)
 
-     name          — shown in the status bar
-     map           — 10×10 grid of tile values (edit freely)
-     entryFromAbove — {x, y, dir} where the player is placed when
-                      they DESCEND onto this level from above
-     entryFromBelow — {x, y, dir} where the player is placed when
-                      they ASCEND onto this level from below
-                      (null if this is the deepest level)
-
-   The stair connection rule:
-     • The entryFromAbove position on level N should sit on top of
-       a TILE_STAIR_UP tile (so the player can go back up).
-     • The entryFromBelow position on level N should sit on top of
-       a TILE_STAIR_DOWN tile (so the player can go back down).
-
-   This way going down then immediately up returns you to the same
-   spot — the staircases connect like real architectural stairs.
+   Stair connection rule:
+     entryFromAbove on level N  sits on a TILE_STAIR_UP  → can go back up.
+     entryFromBelow on level N  sits on a TILE_STAIR_DOWN → can go back down.
 */
 const LEVELS = [
 
@@ -202,20 +362,15 @@ const LEVELS = [
       [1,0,1,1,1,1,0,2,0,1],  // row 8  — STAIR_DOWN at col 7
       [1,1,1,1,1,1,1,1,1,1],  // row 9  (south wall)
     ],
-    /* The player always starts on level 0; treat the start
-       tile as the "entry from above" (arrival point).      */
     entryFromAbove: { x: 1, y: 1, dir: 0 },
-    /* Level 0 is the top — no stairs lead up from here.   */
-    entryFromBelow: null,
+    entryFromBelow: null,   // top level — no up-stairs
   },
 
-  /* ── LEVEL 1: The Catacombs ── */
-  /*
-   * A wide-open pillared hall.  The regular grid of stone columns
-   * makes this feel completely different from the Entry Hall above.
-   * STAIR_UP (3) at col 7 matches the STAIR_DOWN on level 0.
-   * STAIR_DOWN (2) at col 2 leads to the Deep Vaults below.
-   */
+  /* ── LEVEL 1: The Catacombs ──
+     A wide-open pillared hall.  The regular grid of stone columns
+     contrasts sharply with the Entry Hall's winding passages above.
+     STAIR_UP (3) at col 7 matches the STAIR_DOWN on level 0.
+     STAIR_DOWN (2) at col 2 leads to the Deep Vaults below.       */
   {
     name: "THE CATACOMBS",
     map: [
@@ -230,20 +385,14 @@ const LEVELS = [
       [1,0,2,0,0,0,0,3,0,1],  // row 8  STAIR_DOWN col 2, STAIR_UP col 7
       [1,1,1,1,1,1,1,1,1,1],  // row 9
     ],
-    /* Arrive at the STAIR_UP tile so the player can go back up. */
-    entryFromAbove: { x: 7, y: 8, dir: 0 },
-    /* Arrive at the STAIR_DOWN tile so the player can go back down. */
-    entryFromBelow: { x: 2, y: 8, dir: 0 },
+    entryFromAbove: { x: 7, y: 8, dir: 0 },   // lands on STAIR_UP tile
+    entryFromBelow: { x: 2, y: 8, dir: 0 },   // lands on STAIR_DOWN tile
   },
 
-  /* ── LEVEL 2: The Deep Vaults ── */
-  /*
-   * Tight, winding passages — far more walls than floor.
-   * The irregular layout is a deliberate contrast to the
-   * orderly catacomb pillars on the level above.
-   * STAIR_UP (3) at col 2 matches the STAIR_DOWN on level 1.
-   * No STAIR_DOWN — this is the bottom of the dungeon.
-   */
+  /* ── LEVEL 2: The Deep Vaults ──
+     Tight, winding passages — far more walls than floor.
+     STAIR_UP (3) at col 2 matches the STAIR_DOWN on level 1.
+     No STAIR_DOWN — this is the bottom of the dungeon.            */
   {
     name: "THE DEEP VAULTS",
     map: [
@@ -259,8 +408,7 @@ const LEVELS = [
       [1,1,1,1,1,1,1,1,1,1],  // row 9
     ],
     entryFromAbove: { x: 2, y: 8, dir: 0 },
-    /* Bottom level — no stairs lead further down. */
-    entryFromBelow: null,
+    entryFromBelow: null,   // bottom level
   },
 
 ];
@@ -271,6 +419,10 @@ const LEVELS = [
    x, y   — tile coordinates (column, row) on the current level.
    dir    — index into DIRECTIONS[] (0=N, 1=E, 2=S, 3=W).
    level  — index into LEVELS[].
+
+   On page load these start at the default Level 0 entry.
+   enterDungeon() overwrites them from GS.dungeon so a continued
+   save picks up where the player left off.
 */
 const player = {
   x:     LEVELS[0].entryFromAbove.x,
@@ -280,8 +432,8 @@ const player = {
 };
 
 /* Cardinal direction metadata.
-   dx / dy describe the unit step when moving in that direction.
-   Note: y increases downward (south) in our grid.          */
+   dx / dy are the unit step in that direction.
+   Note: y increases downward (south) in our grid.        */
 const DIRECTIONS = [
   { name: "NORTH", dx:  0, dy: -1 },
   { name: "EAST",  dx:  1, dy:  0 },
@@ -292,8 +444,9 @@ const DIRECTIONS = [
 /* ════════════════════════════════════════════════════════════
    CANVAS SETUP
    ════════════════════════════════════════════════════════════
-   We size the canvas to fill the viewport width (up to 480 px)
-   while keeping it square.
+   Square canvas sized to viewport width (up to 480 px).
+   Sizing works even when the dungeon screen is hidden —
+   window.innerWidth is always available.
 */
 const canvas = document.getElementById("view");
 const ctx    = canvas.getContext("2d");
@@ -308,46 +461,34 @@ function resizeCanvas() {
 /* ════════════════════════════════════════════════════════════
    PERSPECTIVE RENDERER
    ════════════════════════════════════════════════════════════
-   This is a "fake 3-D" approach like early Wizardry / Bard's Tale:
-   - We look ahead a fixed number of tiles (VIEW_DEPTH).
-   - For each depth slice we draw a rectangular "tunnel frame"
-     that gets smaller as depth increases, giving a corridor illusion.
-   - We then check whether there is a wall to the LEFT, RIGHT, or
-     FRONT of each slice and draw the appropriate wall polygon.
-
-   Coordinate conventions inside the renderer:
-     cx, cy  — canvas centre
-     The "screen rectangle" at each depth is derived by scaling a
-     half-width (hw) and half-height (hh) by a perspective factor.
+   "Fake 3-D" approach like early Wizardry / Bard's Tale:
+   - We look ahead VIEW_DEPTH tiles.
+   - Each depth slice has a smaller rectangle (PERSP_SCALE).
+   - We check left / right / front for walls at every depth
+     and draw the appropriate filled polygon.
 */
-
-const VIEW_DEPTH = 5;   // how many tiles ahead we draw
-
-/* Perspective scale for each depth step.
-   At depth 0 (the tile the player stands in) scale = 1.0 (full canvas).
-   Each step further away multiplies by PERSP_SCALE, making it smaller. */
+const VIEW_DEPTH  = 5;
 const PERSP_SCALE = 0.55;
 
-/* Precompute the screen rectangles for each depth 0..VIEW_DEPTH.
-   rect[d] = { x1, y1, x2, y2 } corners of the "frame" at depth d.
-   We recalculate these when the canvas is resized.             */
+/* Precomputed screen rectangles for each depth 0..VIEW_DEPTH.
+   rect[d] = { x1, y1, x2, y2 } at depth d.
+   Rebuilt whenever the canvas is resized.                   */
 let depthRects = [];
 
 function buildDepthRects() {
   depthRects = [];
-  const S = canvas.width;          // canvas is square, S×S
+  const S  = canvas.width;
   const cx = S / 2;
   const cy = S / 2;
-  const maxHalf = S / 2;           // half-size at depth 0 (edges of canvas)
+  const maxHalf = S / 2;
 
   for (let d = 0; d <= VIEW_DEPTH; d++) {
-    /* scale shrinks with depth: 0.55^d */
     const scale = Math.pow(PERSP_SCALE, d);
-    const hw = maxHalf * scale;    // half-width
-    const hh = maxHalf * scale;    // half-height (square canvas → same)
+    const hw = maxHalf * scale;
+    const hh = maxHalf * scale;
     depthRects.push({
-      x1: cx - hw,  y1: cy - hh,  // top-left
-      x2: cx + hw,  y2: cy + hh,  // bottom-right
+      x1: cx - hw,  y1: cy - hh,
+      x2: cx + hw,  y2: cy + hh,
     });
   }
 }
@@ -356,10 +497,8 @@ function buildDepthRects() {
    TILE HELPERS
    ════════════════════════════════════════════════════════════ */
 
-/*
- * getTile — return the tile value at (col, row) on the current level.
- * Out-of-bounds coordinates return TILE_WALL (treats edges as solid).
- */
+/* Return the tile value at (col, row) on the current level.
+   Out-of-bounds → TILE_WALL (treat map edges as solid). */
 function getTile(col, row) {
   const map = LEVELS[player.level].map;
   if (row < 0 || row >= map.length || col < 0 || col >= map[0].length) {
@@ -368,23 +507,13 @@ function getTile(col, row) {
   return map[row][col];
 }
 
-/*
- * isWall — returns true if (col, row) blocks movement or line-of-sight.
- *
- * This replaces the original single-map version.  The only changes are:
- *   1. It reads from LEVELS[player.level].map instead of the global MAP.
- *   2. It uses the TILE_WALL constant instead of the bare number 1.
- *   3. Stair tiles (2 and 3) return false — they are walkable floor.
- *
- * The renderer and moveForward() call this exactly as before; they don't
- * need to know anything about levels or tile types themselves.
- */
+/* Returns true if (col, row) blocks movement or line-of-sight.
+   Stair tiles (2 and 3) are walkable — only TILE_WALL blocks. */
 function isWall(col, row) {
   return getTile(col, row) === TILE_WALL;
 }
 
-/* ── Helper: fill a quadrilateral with 4 corner points ──
-   Points are { x, y } objects in canvas space.            */
+/* Fill a quadrilateral with 4 corner points { x, y }.       */
 function fillQuad(p0, p1, p2, p3) {
   ctx.beginPath();
   ctx.moveTo(p0.x, p0.y);
@@ -399,28 +528,21 @@ function fillQuad(p0, p1, p2, p3) {
 /* ════════════════════════════════════════════════════════════
    STAIR GLYPH RENDERER
    ════════════════════════════════════════════════════════════
-   Draws a wireframe staircase symbol into a rectangle on the canvas.
-   Called from the main render loop when a stair tile is directly
-   ahead of the player (in place of the front-wall fill).
+   Draws a wireframe staircase symbol into a depth rectangle
+   when a stair tile is directly ahead of the player.
 
-   rect      — { x1, y1, x2, y2 } the "far" depth rectangle to draw into
+   rect      — { x1, y1, x2, y2 } the far depth rectangle
    stairType — TILE_STAIR_DOWN or TILE_STAIR_UP
 
-   The visual idea:
-     • STAIR_DOWN: horizontal step lines occupy the LOWER half of the rect,
-       getting narrower (more inset) as they recede — like looking down
-       into a stairwell from the top.
-     • STAIR_UP: same but lines occupy the UPPER half — looking up.
-
-   Each step line is also slightly shorter than the one "closer" to you,
-   suggesting the perspective of receding stairs.
+   STAIR_DOWN: step lines in the LOWER half (looking down).
+   STAIR_UP:   step lines in the UPPER half (looking up).
 */
 function drawStairGlyph(rect, stairType) {
   const { x1, y1, x2, y2 } = rect;
   const w = x2 - x1;
   const h = y2 - y1;
 
-  /* Dark tinted background — same treatment as a front wall */
+  /* Dark tinted background */
   ctx.fillStyle = "#000d00";
   ctx.strokeStyle = "#00ff00";
   ctx.beginPath();
@@ -428,93 +550,64 @@ function drawStairGlyph(rect, stairType) {
   ctx.fill();
   ctx.stroke();
 
-  /* Draw N horizontal step lines.
-     i=0 is the widest/nearest step; i=N-1 is the narrowest/farthest. */
+  /* N horizontal step lines, narrowing with perspective */
   const N = 5;
   ctx.beginPath();
   ctx.strokeStyle = "#00ff00";
 
   for (let i = 0; i < N; i++) {
-    /* frac: 0 = nearest step (wide), 1 = farthest step (narrow) */
-    const frac = i / (N - 1);
-
-    /* Horizontal inset increases with frac (perspectival narrowing).
-       Min inset is 4% of width so lines don't touch the border.     */
+    const frac  = i / (N - 1);
     const inset = w * (0.04 + 0.38 * frac);
-
-    /* Vertical position:
-       For STAIR_DOWN, steps start near the bottom and rise toward centre.
-       For STAIR_UP,   steps start near the top   and fall toward centre.
-       Using 60% of the half-height keeps lines within the appropriate half. */
     let lineY;
     if (stairType === TILE_STAIR_DOWN) {
-      /* y2 is the bottom edge; subtract a small margin, then step upward */
       lineY = y2 - h * 0.06 - h * 0.50 * frac;
     } else {
-      /* y1 is the top edge; add a small margin, then step downward */
       lineY = y1 + h * 0.06 + h * 0.50 * frac;
     }
-
     ctx.moveTo(x1 + inset, lineY);
     ctx.lineTo(x2 - inset, lineY);
   }
-
   ctx.stroke();
 
-  /* Small directional arrow in the centre of the rect.
-     ▼ for down-stairs, ▲ for up-stairs.  Sized to fit the rectangle. */
+  /* Directional arrow centred in the opposite half */
   const arrowSize = Math.max(8, h * 0.18);
   ctx.font = `${arrowSize}px "Courier New"`;
   ctx.fillStyle = "#00ff00";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const arrowChar = (stairType === TILE_STAIR_DOWN) ? "▼" : "▲";
-  /* Place arrow in the half of the rect that ISN'T occupied by steps */
-  const arrowY = (stairType === TILE_STAIR_DOWN)
-    ? y1 + h * 0.25   // upper portion (steps are in lower)
-    : y2 - h * 0.25;  // lower portion (steps are in upper)
+  const arrowY    = (stairType === TILE_STAIR_DOWN)
+    ? y1 + h * 0.25
+    : y2 - h * 0.25;
   ctx.fillText(arrowChar, x1 + w / 2, arrowY);
 }
 
 /* ── Main render function ── */
 function render() {
-  buildDepthRects();   // recalc if canvas was resized
+  buildDepthRects();
 
   const S = canvas.width;
-
-  /* Clear to black */
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, S, S);
 
-  /* All lines and fills use phosphor green */
   ctx.strokeStyle = "#00ff00";
-  ctx.fillStyle   = "#000000";   // walls are hollow (black fill, green outline)
+  ctx.fillStyle   = "#000000";
   ctx.lineWidth   = 1.5;
 
-  /* Direction vectors:
-     forward (fd) — the direction the player faces
-     right   (rd) — 90° clockwise from forward
-  */
   const fd = DIRECTIONS[player.dir];
   const rd = DIRECTIONS[(player.dir + 1) % 4];   // right = dir+1 mod 4
 
-  /* Walk forward from the player's position and draw each depth slice.
-     We draw from FAR to NEAR so closer walls paint over farther ones. */
+  /* Draw from FAR to NEAR so closer walls paint over farther ones. */
   for (let d = VIEW_DEPTH - 1; d >= 0; d--) {
-    /* Map tile at this depth along the forward axis */
-    const tx = player.x + fd.dx * d;
-    const ty = player.y + fd.dy * d;
+    const tx  = player.x + fd.dx * d;
+    const ty  = player.y + fd.dy * d;
+    const far  = depthRects[d + 1];
+    const near = depthRects[d];
 
-    /* Screen rectangles at this depth and one step closer */
-    const far  = depthRects[d + 1];   // smaller rect (further away)
-    const near = depthRects[d];       // larger rect  (closer)
-
-    /* ── FRONT WALL / STAIR ──
-       Check the tile ONE step further ahead.                          */
+    /* ── FRONT WALL / STAIR ── */
     const frontX = tx + fd.dx;
     const frontY = ty + fd.dy;
     if (isWall(frontX, frontY)) {
-      /* Solid wall: fill the far rectangle with a dark tint */
       ctx.fillStyle = "#001a00";
       ctx.strokeStyle = "#00ff00";
       ctx.beginPath();
@@ -522,28 +615,23 @@ function render() {
       ctx.fill();
       ctx.stroke();
     } else {
-      /* Not a wall — check if it's a staircase tile and draw the glyph.
-         (Open floor tiles need no special drawing here.)               */
       const frontTile = getTile(frontX, frontY);
       if (frontTile === TILE_STAIR_DOWN || frontTile === TILE_STAIR_UP) {
         drawStairGlyph(far, frontTile);
       }
     }
 
-    /* ── LEFT WALL ──
-       The tile to the LEFT of the current forward tile.
-       "left" is the direction OPPOSITE to right.                   */
+    /* ── LEFT WALL ── */
     const leftX = tx - rd.dx;
     const leftY = ty - rd.dy;
     if (isWall(leftX, leftY)) {
-      /* Draw a trapezoid connecting the left edges of near and far rects */
       ctx.fillStyle = "#001400";
       ctx.strokeStyle = "#00ff00";
       fillQuad(
-        { x: near.x1, y: near.y1 },   // near top-left
-        { x: far.x1,  y: far.y1  },   // far  top-left
-        { x: far.x1,  y: far.y2  },   // far  bottom-left
-        { x: near.x1, y: near.y2 }    // near bottom-left
+        { x: near.x1, y: near.y1 },
+        { x: far.x1,  y: far.y1  },
+        { x: far.x1,  y: far.y2  },
+        { x: near.x1, y: near.y2 }
       );
     }
 
@@ -552,42 +640,34 @@ function render() {
       ctx.fillStyle = "#001400";
       ctx.strokeStyle = "#00ff00";
       fillQuad(
-        { x: near.x2, y: near.y1 },   // near top-right
-        { x: far.x2,  y: far.y1  },   // far  top-right
-        { x: far.x2,  y: far.y2  },   // far  bottom-right
-        { x: near.x2, y: near.y2 }    // near bottom-right
+        { x: near.x2, y: near.y1 },
+        { x: far.x2,  y: far.y1  },
+        { x: far.x2,  y: far.y2  },
+        { x: near.x2, y: near.y2 }
       );
     }
 
-    /* ── CORRIDOR FRAME LINES ──
-       Draw the 4 lines connecting near rect corners to far rect corners.
-       These give the receding-corridor "tunnel" effect.             */
+    /* ── CORRIDOR FRAME LINES ── */
     ctx.strokeStyle = "#00ff00";
     ctx.beginPath();
-    // Top-left edge
     ctx.moveTo(near.x1, near.y1); ctx.lineTo(far.x1, far.y1);
-    // Top-right edge
     ctx.moveTo(near.x2, near.y1); ctx.lineTo(far.x2, far.y1);
-    // Bottom-left edge
     ctx.moveTo(near.x1, near.y2); ctx.lineTo(far.x1, far.y2);
-    // Bottom-right edge
     ctx.moveTo(near.x2, near.y2); ctx.lineTo(far.x2, far.y2);
     ctx.stroke();
 
-    /* Draw the far rectangle outline (the "end" of this corridor slice) */
     ctx.beginPath();
     ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
     ctx.stroke();
   }
 
-  /* Draw the near (innermost) rectangle — the immediate surroundings */
+  /* Innermost (depth-0) rectangle */
   const near0 = depthRects[0];
   ctx.strokeStyle = "#00ff00";
   ctx.beginPath();
   ctx.rect(near0.x1, near0.y1, near0.x2 - near0.x1, near0.y2 - near0.y1);
   ctx.stroke();
 
-  /* Update UI elements that depend on player state */
   updateStatus();
   updateStairButton();
 }
@@ -596,8 +676,7 @@ function render() {
    STATUS BAR
    ════════════════════════════════════════════════════════════ */
 function updateStatus() {
-  const dir   = DIRECTIONS[player.dir];
-  /* Display level as 1-indexed (more natural for players than 0-indexed) */
+  const dir    = DIRECTIONS[player.dir];
   const lvlNum = player.level + 1;
   document.getElementById("status").textContent =
     `LEVEL ${lvlNum}: ${LEVELS[player.level].name}  ` +
@@ -607,79 +686,52 @@ function updateStatus() {
 /* ════════════════════════════════════════════════════════════
    STAIR BUTTON
    ════════════════════════════════════════════════════════════
-   The stair button is only shown when the player is standing
-   on a stair tile.  Its label changes to match the direction.
+   Visible only when the player stands on a stair tile.
 */
 function updateStairButton() {
-  const tile      = getTile(player.x, player.y);
-  const wrap      = document.getElementById("stair-wrap");
-  const btn       = document.getElementById("btn-stairs");
-  const onStairs  = (tile === TILE_STAIR_DOWN || tile === TILE_STAIR_UP);
+  const tile     = getTile(player.x, player.y);
+  const wrap     = document.getElementById("stair-wrap");
+  const btn      = document.getElementById("btn-stairs");
+  const onStairs = (tile === TILE_STAIR_DOWN || tile === TILE_STAIR_UP);
 
   wrap.style.display = onStairs ? "block" : "none";
 
-  if (tile === TILE_STAIR_DOWN) {
-    btn.textContent = "DESCEND ▼";
-  } else if (tile === TILE_STAIR_UP) {
-    btn.textContent = "ASCEND ▲";
-  }
+  if (tile === TILE_STAIR_DOWN) btn.textContent = "DESCEND ▼";
+  else if (tile === TILE_STAIR_UP) btn.textContent = "ASCEND ▲";
 }
 
 /* ════════════════════════════════════════════════════════════
    LEVEL TRANSITIONS
    ════════════════════════════════════════════════════════════
-   changeLevel(direction) moves the player to an adjacent level.
+   changeLevel(direction)
+     +1 → descend (deeper, level index increases)
+     −1 → ascend  (shallower, level index decreases)
 
-   direction =  1 → descend (go deeper, level index increases)
-   direction = -1 → ascend  (go up,     level index decreases)
-
-   The function:
-     1. Checks the player is on the correct stair type.
-     2. Checks the target level exists.
-     3. Reads the entry point from the target level's definition.
-     4. Moves the player there and redraws.
-
-   Entry points are stored directly in the LEVELS array so you
-   don't have to search the map for a stair tile — you simply
-   declare "when arriving from above, start at (x, y, dir)."
+   On success: moves the player, syncs GS, autosaves, redraws.
 */
 function changeLevel(direction) {
-  const tile       = getTile(player.x, player.y);
-  const targetIdx  = player.level + direction;
+  const tile      = getTile(player.x, player.y);
+  const targetIdx = player.level + direction;
 
-  /* Guard: must be on the right stair type */
-  if (direction === 1 && tile !== TILE_STAIR_DOWN) return;
-  if (direction === -1 && tile !== TILE_STAIR_UP)  return;
-
-  /* Guard: target level must exist */
-  if (targetIdx < 0 || targetIdx >= LEVELS.length) return;
+  if (direction ===  1 && tile !== TILE_STAIR_DOWN) return;
+  if (direction === -1 && tile !== TILE_STAIR_UP)   return;
+  if (targetIdx < 0 || targetIdx >= LEVELS.length)  return;
 
   const targetLevel = LEVELS[targetIdx];
-
-  /* Choose the arrival entry point based on which direction we're travelling.
-     Going DOWN → arrive at the target level's entryFromAbove point
-                  (which sits on a STAIR_UP tile so we can come back).
-     Going UP   → arrive at the target level's entryFromBelow point
-                  (which sits on a STAIR_DOWN tile so we can go back down). */
-  const entry = (direction === 1)
-    ? targetLevel.entryFromAbove
-    : targetLevel.entryFromBelow;
-
-  /* Safety check — should never be null if the map is designed correctly,
-     but let's be graceful rather than crash with a bad map.              */
+  const entry = (direction === 1) ? targetLevel.entryFromAbove
+                                  : targetLevel.entryFromBelow;
   if (!entry) return;
 
-  /* Move the player */
   player.level = targetIdx;
   player.x     = entry.x;
   player.y     = entry.y;
   player.dir   = entry.dir;
 
+  syncDungeonToGS();   // save position after level change
   render();
 }
 
-/* Convenience wrapper called by the stair button and by keyboard input.
-   Reads the tile under the player and picks the right direction.       */
+/* Called by the stair button and keyboard; reads tile to pick direction. */
 function useStairs() {
   const tile = getTile(player.x, player.y);
   if (tile === TILE_STAIR_DOWN) changeLevel(1);
@@ -690,8 +742,7 @@ function useStairs() {
    MOVEMENT
    ════════════════════════════════════════════════════════════ */
 
-/* Move the player forward or backward along their facing axis.
-   step =  1 → forward,  -1 → backward                        */
+/* step =  1 → forward,  −1 → backward */
 function moveForward(step) {
   const fd = DIRECTIONS[player.dir];
   const nx = player.x + fd.dx * step;
@@ -699,33 +750,56 @@ function moveForward(step) {
   if (!isWall(nx, ny)) {
     player.x = nx;
     player.y = ny;
+    syncDungeonToGS();   // save position after every step
     render();
   }
 }
 
-/* Rotate the player left or right.
-   delta = -1 → left (counter-clockwise),  +1 → right (clockwise) */
+/* delta = −1 → left (CCW),  +1 → right (CW) */
 function rotate(delta) {
-  /* Add delta, wrap around 0-3 */
   player.dir = (player.dir + 4 + delta) % 4;
+  syncDungeonToGS();   // save facing after every turn
   render();
+}
+
+/* ════════════════════════════════════════════════════════════
+   GS ↔ DUNGEON SYNC
+   ════════════════════════════════════════════════════════════
+   syncDungeonToGS() keeps GS.dungeon in step with the `player`
+   object and triggers an autosave.  Called after every movement.
+
+   enterDungeon() does the reverse — called when transitioning
+   TO the dungeon screen, it copies GS.dungeon → player so a
+   loaded save picks up at the right tile.
+*/
+function syncDungeonToGS() {
+  GS.dungeon.level = player.level;
+  GS.dungeon.x     = player.x;
+  GS.dungeon.y     = player.y;
+  GS.dungeon.dir   = player.dir;
+  autoSave();
+}
+
+function enterDungeon() {
+  player.level = GS.dungeon.level;
+  player.x     = GS.dungeon.x;
+  player.y     = GS.dungeon.y;
+  player.dir   = GS.dungeon.dir;
+  showScreen("dungeon");
+  resizeCanvas();   // sizes + renders now that the canvas is visible
 }
 
 /* ════════════════════════════════════════════════════════════
    INPUT — ON-SCREEN BUTTONS
    ════════════════════════════════════════════════════════════
-   We use both "click" (desktop) and "touchstart" (mobile) so
-   there is no 300ms tap delay on phones.
+   Both click (desktop) and touchstart (mobile) are handled.
+   preventDefault on touchstart eliminates the 300ms tap delay.
 */
-
 function addButtonHandler(id, action) {
   const btn = document.getElementById(id);
 
-  /* Desktop click */
   btn.addEventListener("click", action);
 
-  /* Mobile touch — preventDefault stops the "ghost click" that
-     browsers fire ~300ms after touchstart to maintain compatibility */
   btn.addEventListener("touchstart", (e) => {
     e.preventDefault();
     action();
@@ -744,11 +818,11 @@ addButtonHandler("btn-rt",     () => rotate(1));
 addButtonHandler("btn-stairs", () => useStairs());
 
 /* ════════════════════════════════════════════════════════════
-   INPUT — KEYBOARD (DESKTOP / TESTING)
+   INPUT — KEYBOARD
    ════════════════════════════════════════════════════════════
-   Arrow keys: movement (unchanged from v1).
-   >  or  .  : descend stairs (roguelike convention: > = go down)
-   <  or  ,  : ascend  stairs (roguelike convention: < = go up)
+   Arrow keys: movement.
+   > or .  : descend  (roguelike: > = go down)
+   < or ,  : ascend   (roguelike: < = go up)
 */
 document.addEventListener("keydown", (e) => {
   switch (e.key) {
@@ -762,10 +836,147 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ════════════════════════════════════════════════════════════
+   PROFILE SCREEN
+   ════════════════════════════════════════════════════════════
+   Rendered into #screen-profile on startup and whenever the
+   player returns to the title (after a delete, etc.).
+
+   Flow:
+     New profile  → validate name → reset GS → autoSave → enterDungeon
+     Continue     → loadSave      → enterDungeon
+     Delete       → confirm → deleteSave → re-render profile screen
+*/
+
+/* Build and inject the profile screen HTML. */
+function renderProfileScreen() {
+  const saves = listSaves();
+  let html = '';
+
+  html += '<div class="profile-title">Dungeon Descent</div>';
+  html += '<div class="profile-sub">— a retro dungeon crawler —</div>';
+
+  /* ── New profile box ── */
+  html += '<div class="profile-frame">';
+  html += '<div class="profile-frame-label">NEW PROFILE</div>';
+  html += '<div class="profile-input-row">';
+  html +=   '<input id="profile-name" type="text" maxlength="20"';
+  html +=   ' placeholder="Enter your name..." autocomplete="off">';
+  html +=   '<button class="pcmd primary" onclick="startNewGame()">START</button>';
+  html += '</div>';
+  html += '<div class="profile-log" id="profile-log"></div>';
+  html += '</div>';
+
+  /* ── Saved profiles box (only when saves exist) ── */
+  if (saves.length > 0) {
+    html += '<div class="profile-frame">';
+    html += '<div class="profile-frame-label">SAVED PROFILES</div>';
+    saves.forEach((name, i) => {
+      /* Use data-index to pass the name safely without inline JS escaping */
+      html += '<div class="save-row">';
+      html +=   '<span class="save-name">' + escHtml(name) + '</span>';
+      html +=   '<button class="pcmd primary" data-i="' + i + '" onclick="continueGame(PROFILE_SAVES[this.dataset.i])">CONTINUE</button>';
+      html +=   '<button class="pcmd danger"  data-i="' + i + '" onclick="confirmDelete(PROFILE_SAVES[this.dataset.i])">DEL</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div class="profile-version">v0.1 — stage 1 of n</div>';
+
+  document.getElementById("screen-profile").innerHTML = html;
+
+  /* Expose save names as a module-level array so onclick can index into it
+     without any string-escaping concerns.                                  */
+  window.PROFILE_SAVES = saves;
+
+  /* Wire up Enter key on the name input */
+  const nameInput = document.getElementById("profile-name");
+  if (nameInput) {
+    nameInput.focus();
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); startNewGame(); }
+    });
+  }
+}
+
+/* Minimal HTML-escape to prevent injection in the save name display. */
+function escHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/* Update the status line inside the profile screen. */
+function setProfileLog(msg, cls) {
+  const el = document.getElementById("profile-log");
+  if (el) {
+    el.textContent = msg;
+    el.className   = "profile-log " + (cls || "");
+  }
+}
+
+/* ── START NEW GAME ── */
+function startNewGame() {
+  const input = document.getElementById("profile-name");
+  const name  = input ? input.value.trim() : "";
+
+  if (!name) {
+    setProfileLog("Enter a name for your save profile.", "err");
+    return;
+  }
+
+  /* Warn before clobbering an existing save */
+  if (listSaves().includes(name)) {
+    if (!confirm('"' + name + '" already exists.\nStart over and overwrite this save?')) return;
+  }
+
+  /* Reset GS to a clean state */
+  GS.profileName = name;
+  GS.party       = [];
+  GS.gold        = 0;
+  GS.dungeon     = {
+    level: 0,
+    x:     LEVELS[0].entryFromAbove.x,
+    y:     LEVELS[0].entryFromAbove.y,
+    dir:   LEVELS[0].entryFromAbove.dir,
+  };
+  GS.screen  = "dungeon";
+  GS.combat  = null;
+
+  autoSave();
+  enterDungeon();
+}
+
+/* ── CONTINUE FROM SAVE ── */
+function continueGame(name) {
+  if (!loadSave(name)) {
+    setProfileLog('Could not load profile "' + name + '".', "err");
+    return;
+  }
+  enterDungeon();
+}
+
+/* ── DELETE SAVE ── */
+function confirmDelete(name) {
+  if (!confirm('Delete save "' + name + '"?\nThis cannot be undone.')) return;
+  deleteSave(name);
+  if (GS.profileName === name) GS.profileName = "";
+  renderProfileScreen();   // refresh the list
+}
+
+/* ════════════════════════════════════════════════════════════
    STARTUP
-   ════════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════════════════
+   1. Size the canvas (works even while the dungeon screen is
+      hidden — window.innerWidth is always available).
+   2. Show the profile screen.
+*/
 window.addEventListener("resize", resizeCanvas);
-resizeCanvas();   // sets canvas size and calls render() for the first time
+resizeCanvas();            // initial size + background render
+showScreen("profile");     // profile screen is first on every load
+renderProfileScreen();     // inject the profile screen HTML
 </script>
 </body>
 </html>
