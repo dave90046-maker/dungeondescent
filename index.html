@@ -5,155 +5,410 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Dungeon Descent</title>
   <style>
-    /* ── Global reset & retro terminal look ── */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    /* ── Global reset ── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── CSS custom properties shared by every screen ── */
+    :root {
+      --green:     #00ff00;
+      --green-dim: #1f9e1f;
+      --line:      #0a3d0a;   /* dim border / ruled lines */
+      --amber:     #ffb000;
+      --red:       #ff4d4d;
+      --red-dim:   #a02828;
+      --blue:      #7fd1ff;   /* heal / spell info */
     }
 
     body {
       background: #000;
-      color: #00ff00;
+      color: var(--green);
       font-family: "Courier New", Courier, monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
       min-height: 100vh;
-      padding: 8px;
-      /* Prevent tap-hold context menu on mobile */
       -webkit-user-select: none;
       user-select: none;
     }
 
-    h1 {
-      font-size: 1.1rem;
-      letter-spacing: 0.3em;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-      text-shadow: 0 0 8px #00ff00;
-    }
-
-    /* ── The 3-D view canvas ── */
-    #view {
-      border: 2px solid #00ff00;
-      box-shadow: 0 0 12px #00ff00;
-      display: block;
-      /* Canvas is square; we'll size it with JS */
-      image-rendering: pixelated;
-    }
-
-    /* ── Status bar below the canvas ── */
-    #status {
-      margin-top: 6px;
-      font-size: 0.85rem;
-      letter-spacing: 0.1em;
-    }
-
-    /* ── D-pad control grid ── */
-    /*
-     * Layout:
-     *   [  ] [FWD] [  ]
-     *   [LT] [  ] [RT]
-     *   [  ] [BCK] [  ]
-     */
-    #controls {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-      margin-top: 10px;
+    /* ── Screen container ──────────────────────────────────
+       Every .screen starts hidden.  showScreen() reveals one
+       by setting display:flex, making it a centred flex column. */
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
       width: 100%;
-      max-width: 320px;
+      min-height: 100vh;
+      padding: 8px;
     }
 
-    .btn {
+    /* ════════════════════════════════════════════════════
+       SHARED UI PRIMITIVES  (used by Town + future screens)
+       ════════════════════════════════════════════════════ */
+
+    /* Centred title block */
+    .title-bar { text-align: center; margin-bottom: 10px; }
+    .title-bar h1 {
+      font-size: 1.6rem; letter-spacing: 0.3em; text-transform: uppercase;
+      margin: 0; text-shadow: 0 0 8px var(--green); font-weight: normal;
+    }
+    .sub { color: var(--green-dim); letter-spacing: 0.2em; font-size: 0.85rem; }
+
+    /* Bordered content box */
+    .frame {
+      border: 2px solid var(--green);
+      box-shadow: 0 0 12px var(--green);
       background: #000;
-      color: #00ff00;
-      border: 2px solid #00ff00;
-      font-family: inherit;
-      font-size: 1.2rem;
-      padding: 16px 0;
-      cursor: pointer;
-      text-align: center;
-      border-radius: 4px;
-      box-shadow: 0 0 6px #00ff00;
-      /* Prevent double-tap zoom on mobile */
-      touch-action: manipulation;
-      transition: background 0.08s;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+    }
+    .frame-label {
+      color: var(--green-dim); font-size: 0.85rem; letter-spacing: 0.15em;
+      margin-bottom: 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px;
     }
 
-    .btn:active,
-    .btn.pressed {
-      background: #003300;
+    /* ── Town / shared command buttons ──────────────────── */
+    button.cmd {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 16px; background: #000; color: var(--green);
+      border: 2px solid var(--green); border-radius: 4px;
+      box-shadow: 0 0 6px var(--green); padding: 7px 12px;
+      cursor: pointer; letter-spacing: 1px;
+      touch-action: manipulation; transition: background 0.08s;
     }
+    button.cmd:hover:not(:disabled),
+    button.cmd:active:not(:disabled) { background: #003300; }
+    button.cmd:disabled { color: var(--line); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
+    button.cmd.selected { background: var(--green); color: #000; box-shadow: none; }
+    button.cmd.small    { font-size: 13px; padding: 3px 8px; }
+    button.cmd.primary  { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 6px var(--amber); }
+    button.cmd.primary:hover:not(:disabled)  { background: #332200; }
+    button.cmd.danger   { border-color: var(--red);   color: var(--red);   box-shadow: 0 0 6px var(--red); }
+    button.cmd.danger:hover:not(:disabled)   { background: #330000; }
+    button.cmd.heal     { border-color: var(--blue);  color: var(--blue);  box-shadow: 0 0 6px var(--blue); }
+    button.cmd.heal:hover:not(:disabled)     { background: #001a33; }
 
-    /* Empty cells in the grid — invisible spacer */
-    .btn-empty {
-      visibility: hidden;
-    }
+    /* ── HP and XP bars ─────────────────────────────────── */
+    .hp-bar { display:inline-block; width:65px; height:7px; border:1px solid var(--green); vertical-align:middle; margin:0 3px; }
+    .hp-fill { height:100%; background:var(--green); }
+    .hp-fill.low  { background: var(--amber); }
+    .hp-fill.crit { background: var(--red); }
+    .xp-bar  { display:inline-block; width:65px; height:5px; border:1px solid var(--line); vertical-align:middle; margin:0 3px; background:#001100; }
+    .xp-fill { height:100%; background:var(--green-dim); }
 
-    /* ── Stair button — shown only when standing on a staircase ── */
-    #stair-wrap {
-      display: none;           /* hidden by default; JS shows it */
-      width: 100%;
-      max-width: 320px;
-      margin-top: 6px;
+    /* ════════════════════════════════════════════════════
+       PROFILE SCREEN
+       ════════════════════════════════════════════════════ */
+    .profile-title {
+      font-size: 2rem; letter-spacing: 0.4em; text-transform: uppercase;
+      text-shadow: 0 0 16px var(--green); margin: 28px 0 6px;
     }
+    .profile-sub {
+      color: var(--green-dim); font-size: 0.8rem;
+      letter-spacing: 0.25em; margin-bottom: 32px;
+    }
+    .profile-frame {
+      border: 2px solid var(--green); box-shadow: 0 0 12px var(--green);
+      padding: 16px 20px; width: 100%; max-width: 420px; margin-bottom: 12px;
+    }
+    .profile-frame-label {
+      color: var(--green-dim); font-size: 0.78rem; letter-spacing: 0.15em;
+      border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 14px;
+    }
+    .profile-input-row { display: flex; gap: 8px; align-items: center; }
+    input#profile-name {
+      font-family: "Courier New", Courier, monospace; font-size: 16px;
+      background: #000; color: var(--green); border: 2px solid var(--green);
+      border-radius: 4px; padding: 8px 10px; flex: 1; min-width: 0;
+    }
+    input#profile-name:focus  { outline: none; box-shadow: 0 0 6px var(--green); }
+    input#profile-name::placeholder { color: var(--line); }
+    button.pcmd {
+      font-family: "Courier New", Courier, monospace; font-size: 15px;
+      background: #000; color: var(--green); border: 2px solid var(--green);
+      border-radius: 4px; box-shadow: 0 0 6px var(--green);
+      padding: 8px 14px; cursor: pointer; letter-spacing: 1px;
+      touch-action: manipulation; transition: background 0.08s; white-space: nowrap;
+    }
+    button.pcmd:hover:not(:disabled),
+    button.pcmd:active:not(:disabled) { background: #003300; }
+    button.pcmd:disabled { color: var(--line); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
+    button.pcmd.primary { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 6px var(--amber); }
+    button.pcmd.primary:hover:not(:disabled) { background: #332200; }
+    button.pcmd.danger  { border-color: var(--red); color: var(--red); box-shadow: 0 0 4px var(--red); font-size: 12px; padding: 4px 9px; }
+    button.pcmd.danger:hover:not(:disabled)  { background: #330000; }
+    .save-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+    .save-row:last-child { border-bottom: none; }
+    .save-name { flex: 1; font-size: 1rem; }
+    .profile-log { min-height: 20px; font-size: 14px; margin-top: 10px; color: var(--green-dim); }
+    .profile-log.err { color: var(--red); }
+    .profile-log.ok  { color: var(--green); text-shadow: 0 0 3px var(--green); }
+    .profile-version { color: var(--line); font-size: 0.72rem; margin-top: auto; padding: 24px 0 8px; letter-spacing: 0.1em; }
 
-    #btn-stairs {
-      width: 100%;
-      font-size: 1rem;
-      letter-spacing: 0.15em;
+    /* ════════════════════════════════════════════════════
+       TOWN SCREEN
+       ════════════════════════════════════════════════════ */
+    #town-wrap { width: 100%; max-width: 900px; }
+
+    .town-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 14px; border: 2px solid var(--green);
+      box-shadow: 0 0 12px var(--green); margin-bottom: 10px;
     }
+    .gold-amt { color: var(--amber); text-shadow: 0 0 4px var(--amber); font-size: 1.1rem; }
+
+    .nav-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+    /* Party strip — responsive grid of member cards */
+    .party-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+    .party-card  { border: 2px solid var(--line); padding: 7px 10px; cursor: pointer; transition: border-color 0.1s, box-shadow 0.1s; }
+    .party-card:hover   { border-color: var(--green-dim); }
+    .party-card.psel    { border-color: var(--green); box-shadow: 0 0 8px var(--green); }
+    .party-card.pdown   { border-color: var(--red-dim); }
+    .pname { font-size: 1rem; margin-bottom: 2px; }
+    .pinfo { font-size: 0.78rem; color: var(--green-dim); }
+    .pdown .pname { color: var(--red); }
+    .pdown .pinfo { color: var(--red-dim); }
+
+    /* Shop */
+    .char-sel    { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .filter-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    table.items  { width: 100%; border-collapse: collapse; font-size: 17px; }
+    table.items th { color:var(--green-dim); font-weight:normal; font-size:0.78rem; letter-spacing:1px; border-bottom:1px solid var(--line); padding:2px 6px; text-align:left; }
+    table.items td { padding: 4px 6px; vertical-align: middle; }
+    table.items tr.cant-use td  { color: var(--line); }
+    table.items tr.is-equipped td { color: var(--amber); }
+    .tier-badge { font-size:0.72rem; color:var(--green-dim); border:1px solid var(--line); padding:0 3px; }
+    .equipped-section { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
+    .equip-row  { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .equip-lbl  { width:70px; color:var(--green-dim); font-size:0.85rem; }
+    .equip-name { flex: 1; }
+
+    /* Training / Temple / Tavern */
+    .train-row   { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+    .train-name  { min-width:100px; }
+    .xp-info     { flex:1; font-size:0.82rem; color:var(--green-dim); }
+    .temple-row  { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
+    .recruit-card{ border:1px solid var(--line); padding:8px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+
+    #town-log     { min-height: 24px; font-size: 15px; color: var(--green-dim); margin-top: 6px; }
+    #town-log.ok  { color: var(--green); text-shadow: 0 0 3px var(--green); }
+    #town-log.err { color: var(--red); }
+    #town-log.info{ color: var(--blue); }
+
+    /* ════════════════════════════════════════════════════
+       CHARACTER CREATION SCREEN
+       ════════════════════════════════════════════════════ */
+    #cc-wrap { width:100%; max-width:880px; }
+
+    .field-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+    .field-row label { color:var(--green-dim); font-size:0.85rem; letter-spacing:0.1em; min-width:90px; }
+
+    .pool-readout { font-size:1.1rem; margin-bottom:8px; }
+    .pool-readout .num { color:var(--amber); text-shadow:0 0 4px var(--amber); }
+
+    table.stats { width:100%; border-collapse:collapse; margin-bottom:10px; }
+    table.stats td { padding:4px 6px; vertical-align:middle; }
+    table.stats td.stat-name { width:70px; color:var(--green-dim); }
+    table.stats td.stat-val  { width:50px; text-align:center; font-size:1.1rem; }
+    table.stats td.stat-mod  { width:60px; text-align:center; color:var(--green-dim); }
+    table.stats td.stat-btns { white-space:nowrap; }
+
+    .req-note   { color:var(--green-dim); font-size:0.8rem; margin-top:4px; }
+    .empty-note { color:var(--line); font-style:italic; }
+
+    table.roster { width:100%; border-collapse:collapse; font-size:17px; }
+    table.roster td, table.roster th { padding:3px 5px; text-align:left; white-space:nowrap; }
+    table.roster th { color:var(--green-dim); font-weight:normal; font-size:0.78rem;
+                      letter-spacing:1px; border-bottom:1px solid var(--line); }
+
+    input#cc-name {
+      font-family:"Courier New",Courier,monospace; font-size:16px;
+      background:#000; color:var(--green); border:2px solid var(--green);
+      border-radius:4px; padding:6px 10px; flex:1; min-width:160px;
+    }
+    input#cc-name:focus { outline:none; box-shadow:0 0 6px var(--green); }
+    input#cc-name::placeholder { color:var(--line); }
+
+    #cc-status { color:var(--green-dim); font-size:15px; min-height:22px; margin-top:6px; }
+    #cc-status.ok  { color:var(--green); text-shadow:0 0 4px var(--green); }
+    #cc-status.err { color:var(--red); }
+
+    /* ════════════════════════════════════════════════════
+       DUNGEON SCREEN  (first-person view — unchanged from v1/v2)
+       ════════════════════════════════════════════════════ */
+    h1 {
+      font-size: 1.1rem; letter-spacing: 0.3em; text-transform: uppercase;
+      margin-bottom: 6px; text-shadow: 0 0 8px var(--green);
+    }
+    #view { border:2px solid var(--green); box-shadow:0 0 12px var(--green); display:block; image-rendering:pixelated; }
+    #status { margin-top:6px; font-size:0.85rem; letter-spacing:0.1em; }
+
+    #controls {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 6px; margin-top: 10px; width: 100%; max-width: 320px;
+    }
+    .btn {
+      background:#000; color:var(--green); border:2px solid var(--green);
+      font-family:inherit; font-size:1.2rem; padding:16px 0;
+      cursor:pointer; text-align:center; border-radius:4px;
+      box-shadow:0 0 6px var(--green); touch-action:manipulation; transition:background 0.08s;
+    }
+    .btn:active, .btn.pressed { background: #003300; }
+    .btn-empty   { visibility: hidden; }
+
+    #stair-wrap  { display:none; width:100%; max-width:320px; margin-top:6px; }
+    #btn-stairs  { width:100%; font-size:1rem; letter-spacing:0.15em; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: var(--green); }
   </style>
 </head>
 <body>
 
-  <h1>Dungeon Descent</h1>
-
-  <!-- The 3-D wireframe view is drawn here -->
-  <canvas id="view"></canvas>
-
-  <!-- Level, coordinates and facing direction -->
-  <div id="status">LEVEL 1  X:0 Y:0  FACING:NORTH</div>
-
-  <!-- On-screen D-pad -->
-  <div id="controls">
-    <div class="btn btn-empty"></div>
-    <button class="btn" id="btn-fwd"  aria-label="Forward">&#9650;</button>
-    <div class="btn btn-empty"></div>
-
-    <button class="btn" id="btn-lt"   aria-label="Turn Left">&#9668;</button>
-    <div class="btn btn-empty"></div>
-    <button class="btn" id="btn-rt"   aria-label="Turn Right">&#9658;</button>
-
-    <div class="btn btn-empty"></div>
-    <button class="btn" id="btn-back" aria-label="Back">&#9660;</button>
-    <div class="btn btn-empty"></div>
+  <!-- ══ PROFILE SCREEN ════════════════════════════════════ -->
+  <div id="screen-profile" class="screen">
+    <!-- Injected by renderProfileScreen() -->
   </div>
 
-  <!-- Stair button — text and visibility controlled by JS -->
-  <div id="stair-wrap">
-    <button class="btn" id="btn-stairs" aria-label="Use Stairs">DESCEND &#9660;</button>
+  <!-- ══ TOWN SCREEN ═══════════════════════════════════════ -->
+  <div id="screen-town" class="screen">
+    <div id="town-wrap">
+
+      <div class="title-bar">
+        <h1>Dungeon Descent</h1>
+        <div class="sub">— town of ironhaven —</div>
+      </div>
+
+      <div class="town-header">
+        <div>
+          TOWN OF IRONHAVEN
+          <button class="cmd small" onclick="backToProfile()"
+                  style="margin-left:14px">◀ SAVE &amp; EXIT</button>
+        </div>
+        <div>GOLD: <span class="gold-amt" id="town-gold">0</span> gp</div>
+      </div>
+
+      <div class="nav-tabs" id="town-nav"></div>
+
+      <div class="frame" id="town-content"></div>
+
+      <div class="frame">
+        <div class="frame-label">PARTY</div>
+        <div class="party-strip" id="town-party"></div>
+      </div>
+
+      <div id="town-log"></div>
+
+    </div>
   </div>
 
+  <!-- ══ DUNGEON SCREEN ════════════════════════════════════ -->
+  <div id="screen-dungeon" class="screen">
+
+    <h1>Dungeon Descent</h1>
+    <canvas id="view"></canvas>
+    <div id="status">LEVEL 1  X:0 Y:0  FACING:NORTH</div>
+
+    <div id="controls">
+      <div class="btn btn-empty"></div>
+      <button class="btn" id="btn-fwd"  aria-label="Forward">&#9650;</button>
+      <div class="btn btn-empty"></div>
+
+      <button class="btn" id="btn-lt"   aria-label="Turn Left">&#9668;</button>
+      <div class="btn btn-empty"></div>
+      <button class="btn" id="btn-rt"   aria-label="Turn Right">&#9658;</button>
+
+      <div class="btn btn-empty"></div>
+      <button class="btn" id="btn-back" aria-label="Back">&#9660;</button>
+      <div class="btn btn-empty"></div>
+    </div>
+
+    <div id="stair-wrap">
+      <button class="btn" id="btn-stairs" aria-label="Use Stairs">DESCEND &#9660;</button>
+    </div>
+
+    <!-- Return-to-town button, always visible while in dungeon -->
+    <div style="width:100%;max-width:320px;margin-top:6px">
+      <button class="btn" onclick="enterTown()"
+              style="width:100%;font-size:0.9rem;letter-spacing:0.1em">⬆ RETURN TO TOWN</button>
+    </div>
+
+  </div><!-- /screen-dungeon -->
+
+  <!-- ══ CHARACTER CREATION SCREEN ════════════════════════════ -->
+  <div id="screen-creation" class="screen">
+    <div id="cc-wrap">
+
+      <div class="title-bar">
+        <h1>Dungeon Descent</h1>
+        <div class="sub">— character creation —</div>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">NEW CHARACTER</div>
+
+        <div class="field-row">
+          <label>NAME</label>
+          <input type="text" id="cc-name" maxlength="16" placeholder="Type a name..." autocomplete="off">
+        </div>
+
+        <div class="field-row">
+          <label>RACE</label>
+          <div id="cc-race-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        </div>
+
+        <div class="pool-readout">POLISH POOL: <span class="num" id="cc-pool">7</span> points remaining</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <button class="cmd" id="cc-reroll-btn" onclick="ccReroll()">REROLL STATS (3 left)</button>
+          <button class="cmd" onclick="ccResetPolish()">RESET POLISH</button>
+        </div>
+
+        <table class="stats" id="cc-stat-table"></table>
+
+        <div class="field-row" style="margin-top:4px;">
+          <label>CLASS</label>
+          <div id="cc-class-btns" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>
+        <div class="req-note">Requirements: FIGHTER needs STR 11+, THIEF needs DEX 11+, PRIEST needs WIS 11+, MAGE needs INT 11+.</div>
+
+        <div class="frame-label" style="margin-top:10px;">PREVIEW</div>
+        <div id="cc-preview" style="margin-bottom:6px;"></div>
+
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button class="cmd primary" id="cc-add-btn" onclick="ccAddToParty()">ADD TO PARTY</button>
+          <button class="cmd" onclick="ccBackToProfile()">◀ BACK</button>
+        </div>
+        <div id="cc-status"></div>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">PARTY ROSTER (<span id="cc-roster-count">0</span>/6)</div>
+        <table class="roster" id="cc-roster"></table>
+      </div>
+
+      <div class="frame">
+        <button class="cmd primary" id="cc-begin-btn" onclick="ccBeginAdventure()">BEGIN ADVENTURE ▶</button>
+        <div id="cc-begin-log" class="req-note" style="margin-top:6px;"></div>
+      </div>
+
+    </div>
+  </div><!-- /screen-creation -->
+
+<!-- game.js defines GS, autoSave/loadSave, showScreen, and all
+     shared constants (WEAPONS, ARMORS, CLASSES, RACES, helpers). -->
+<script src="game.js"></script>
 <script>
 "use strict";
 
 /* ════════════════════════════════════════════════════════════
-   TILE CONSTANTS
+   DUNGEON — TILE CONSTANTS
    ════════════════════════════════════════════════════════════
-   These are the values you write into the map grid arrays.
-   Using named constants instead of bare numbers makes the
-   map arrays much easier to read when you design levels.
-
      0  TILE_FLOOR      — open, walkable passage
      1  TILE_WALL       — solid stone, blocks movement and view
-     2  TILE_STAIR_DOWN — staircase going DEEPER (to the next level)
-     3  TILE_STAIR_UP   — staircase going UP    (to the previous level)
-
-   To place stairs in a level, simply put a 2 or 3 in the grid.
+     2  TILE_STAIR_DOWN — staircase going DEEPER (next level)
+     3  TILE_STAIR_UP   — staircase going UP    (previous level)
 */
 const TILE_FLOOR      = 0;
 const TILE_WALL       = 1;
@@ -163,27 +418,16 @@ const TILE_STAIR_UP   = 3;
 /* ════════════════════════════════════════════════════════════
    DUNGEON LEVELS
    ════════════════════════════════════════════════════════════
-   LEVELS is an array of level objects.  Index 0 is the shallowest
-   level; the last index is the deepest.
+   Each level has:
+     name           — shown in the status bar
+     map            — 10×10 grid of tile values
+     entryFromAbove — {x, y, dir} landing spot when descending in
+     entryFromBelow — {x, y, dir} landing spot when ascending in
+                      (null on the deepest level)
 
-   Each level object has:
-
-     name          — shown in the status bar
-     map           — 10×10 grid of tile values (edit freely)
-     entryFromAbove — {x, y, dir} where the player is placed when
-                      they DESCEND onto this level from above
-     entryFromBelow — {x, y, dir} where the player is placed when
-                      they ASCEND onto this level from below
-                      (null if this is the deepest level)
-
-   The stair connection rule:
-     • The entryFromAbove position on level N should sit on top of
-       a TILE_STAIR_UP tile (so the player can go back up).
-     • The entryFromBelow position on level N should sit on top of
-       a TILE_STAIR_DOWN tile (so the player can go back down).
-
-   This way going down then immediately up returns you to the same
-   spot — the staircases connect like real architectural stairs.
+   Stair connection rule:
+     entryFromAbove on level N  sits on TILE_STAIR_UP  → can go back up.
+     entryFromBelow on level N  sits on TILE_STAIR_DOWN → can go back down.
 */
 const LEVELS = [
 
@@ -191,75 +435,60 @@ const LEVELS = [
   {
     name: "THE ENTRY HALL",
     map: [
-      [1,1,1,1,1,1,1,1,1,1],  // row 0  (north wall)
-      [1,0,0,0,1,0,0,0,0,1],  // row 1
-      [1,0,1,0,1,0,1,1,0,1],  // row 2
-      [1,0,1,0,0,0,0,1,0,1],  // row 3
-      [1,0,1,1,1,1,0,1,0,1],  // row 4
-      [1,0,0,0,0,1,0,0,0,1],  // row 5
-      [1,1,1,0,1,1,1,1,0,1],  // row 6
-      [1,0,0,0,0,0,0,1,0,1],  // row 7
-      [1,0,1,1,1,1,0,2,0,1],  // row 8  — STAIR_DOWN at col 7
-      [1,1,1,1,1,1,1,1,1,1],  // row 9  (south wall)
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,1,0,0,0,0,1],
+      [1,0,1,0,1,0,1,1,0,1],
+      [1,0,1,0,0,0,0,1,0,1],
+      [1,0,1,1,1,1,0,1,0,1],
+      [1,0,0,0,0,1,0,0,0,1],
+      [1,1,1,0,1,1,1,1,0,1],
+      [1,0,0,0,0,0,0,1,0,1],
+      [1,0,1,1,1,1,0,2,0,1],  // STAIR_DOWN at col 7
+      [1,1,1,1,1,1,1,1,1,1],
     ],
-    /* The player always starts on level 0; treat the start
-       tile as the "entry from above" (arrival point).      */
-    entryFromAbove: { x: 1, y: 1, dir: 0 },
-    /* Level 0 is the top — no stairs lead up from here.   */
+    entryFromAbove: { x:1, y:1, dir:0 },
     entryFromBelow: null,
   },
 
-  /* ── LEVEL 1: The Catacombs ── */
-  /*
-   * A wide-open pillared hall.  The regular grid of stone columns
-   * makes this feel completely different from the Entry Hall above.
-   * STAIR_UP (3) at col 7 matches the STAIR_DOWN on level 0.
-   * STAIR_DOWN (2) at col 2 leads to the Deep Vaults below.
-   */
+  /* ── LEVEL 1: The Catacombs ──
+     Pillared hall. STAIR_UP col 7 connects to level 0.
+     STAIR_DOWN col 2 leads to the Deep Vaults.            */
   {
     name: "THE CATACOMBS",
     map: [
-      [1,1,1,1,1,1,1,1,1,1],  // row 0
-      [1,0,0,0,0,0,0,0,0,1],  // row 1  open aisle
-      [1,0,1,0,1,0,1,0,1,1],  // row 2  pillars at cols 2,4,6,8
-      [1,0,0,0,0,0,0,0,0,1],  // row 3  open aisle
-      [1,0,1,0,1,0,1,0,1,1],  // row 4  pillars
-      [1,0,0,0,0,0,0,0,0,1],  // row 5  open aisle
-      [1,0,1,0,1,0,1,0,1,1],  // row 6  pillars
-      [1,0,0,0,0,0,0,0,0,1],  // row 7  open aisle
-      [1,0,2,0,0,0,0,3,0,1],  // row 8  STAIR_DOWN col 2, STAIR_UP col 7
-      [1,1,1,1,1,1,1,1,1,1],  // row 9
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,0,1,0,1,0,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,0,1,0,1,0,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,0,1,0,1,0,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,2,0,0,0,0,3,0,1],  // STAIR_DOWN col 2, STAIR_UP col 7
+      [1,1,1,1,1,1,1,1,1,1],
     ],
-    /* Arrive at the STAIR_UP tile so the player can go back up. */
-    entryFromAbove: { x: 7, y: 8, dir: 0 },
-    /* Arrive at the STAIR_DOWN tile so the player can go back down. */
-    entryFromBelow: { x: 2, y: 8, dir: 0 },
+    entryFromAbove: { x:7, y:8, dir:0 },
+    entryFromBelow: { x:2, y:8, dir:0 },
   },
 
-  /* ── LEVEL 2: The Deep Vaults ── */
-  /*
-   * Tight, winding passages — far more walls than floor.
-   * The irregular layout is a deliberate contrast to the
-   * orderly catacomb pillars on the level above.
-   * STAIR_UP (3) at col 2 matches the STAIR_DOWN on level 1.
-   * No STAIR_DOWN — this is the bottom of the dungeon.
-   */
+  /* ── LEVEL 2: The Deep Vaults ──
+     Tight winding passages. STAIR_UP col 2 connects to level 1.
+     No STAIR_DOWN — this is the bottom of the dungeon.    */
   {
     name: "THE DEEP VAULTS",
     map: [
-      [1,1,1,1,1,1,1,1,1,1],  // row 0
-      [1,0,0,1,0,0,0,0,0,1],  // row 1
-      [1,0,1,0,0,1,1,0,0,1],  // row 2
-      [1,0,0,0,1,0,0,0,1,1],  // row 3
-      [1,1,1,0,0,1,0,0,0,1],  // row 4
-      [1,0,0,0,1,0,0,1,0,1],  // row 5
-      [1,0,1,1,0,0,1,0,0,1],  // row 6
-      [1,0,0,1,1,0,0,0,1,1],  // row 7
-      [1,0,3,0,0,0,1,0,0,1],  // row 8  STAIR_UP at col 2
-      [1,1,1,1,1,1,1,1,1,1],  // row 9
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,1,0,0,0,0,0,1],
+      [1,0,1,0,0,1,1,0,0,1],
+      [1,0,0,0,1,0,0,0,1,1],
+      [1,1,1,0,0,1,0,0,0,1],
+      [1,0,0,0,1,0,0,1,0,1],
+      [1,0,1,1,0,0,1,0,0,1],
+      [1,0,0,1,1,0,0,0,1,1],
+      [1,0,3,0,0,0,1,0,0,1],  // STAIR_UP at col 2
+      [1,1,1,1,1,1,1,1,1,1],
     ],
-    entryFromAbove: { x: 2, y: 8, dir: 0 },
-    /* Bottom level — no stairs lead further down. */
+    entryFromAbove: { x:2, y:8, dir:0 },
     entryFromBelow: null,
   },
 
@@ -268,9 +497,9 @@ const LEVELS = [
 /* ════════════════════════════════════════════════════════════
    PLAYER STATE
    ════════════════════════════════════════════════════════════
-   x, y   — tile coordinates (column, row) on the current level.
-   dir    — index into DIRECTIONS[] (0=N, 1=E, 2=S, 3=W).
-   level  — index into LEVELS[].
+   Mirrors GS.dungeon.  enterDungeon() copies GS → player so a
+   loaded save picks up at the right tile.  syncDungeonToGS()
+   copies player → GS after every step.
 */
 const player = {
   x:     LEVELS[0].entryFromAbove.x,
@@ -279,22 +508,16 @@ const player = {
   level: 0,
 };
 
-/* Cardinal direction metadata.
-   dx / dy describe the unit step when moving in that direction.
-   Note: y increases downward (south) in our grid.          */
 const DIRECTIONS = [
-  { name: "NORTH", dx:  0, dy: -1 },
-  { name: "EAST",  dx:  1, dy:  0 },
-  { name: "SOUTH", dx:  0, dy:  1 },
-  { name: "WEST",  dx: -1, dy:  0 },
+  { name:"NORTH", dx: 0, dy:-1 },
+  { name:"EAST",  dx: 1, dy: 0 },
+  { name:"SOUTH", dx: 0, dy: 1 },
+  { name:"WEST",  dx:-1, dy: 0 },
 ];
 
 /* ════════════════════════════════════════════════════════════
    CANVAS SETUP
-   ════════════════════════════════════════════════════════════
-   We size the canvas to fill the viewport width (up to 480 px)
-   while keeping it square.
-*/
+   ════════════════════════════════════════════════════════════ */
 const canvas = document.getElementById("view");
 const ctx    = canvas.getContext("2d");
 
@@ -302,456 +525,210 @@ function resizeCanvas() {
   const size = Math.min(window.innerWidth - 16, 480);
   canvas.width  = size;
   canvas.height = size;
-  render();   // redraw immediately after resize
+  render();
 }
 
 /* ════════════════════════════════════════════════════════════
    PERSPECTIVE RENDERER
    ════════════════════════════════════════════════════════════
-   This is a "fake 3-D" approach like early Wizardry / Bard's Tale:
-   - We look ahead a fixed number of tiles (VIEW_DEPTH).
-   - For each depth slice we draw a rectangular "tunnel frame"
-     that gets smaller as depth increases, giving a corridor illusion.
-   - We then check whether there is a wall to the LEFT, RIGHT, or
-     FRONT of each slice and draw the appropriate wall polygon.
-
-   Coordinate conventions inside the renderer:
-     cx, cy  — canvas centre
-     The "screen rectangle" at each depth is derived by scaling a
-     half-width (hw) and half-height (hh) by a perspective factor.
+   "Fake 3-D" like early Wizardry / Bard's Tale.
+   VIEW_DEPTH tiles ahead are drawn back-to-front.
+   PERSP_SCALE shrinks each successive depth rectangle.
 */
-
-const VIEW_DEPTH = 5;   // how many tiles ahead we draw
-
-/* Perspective scale for each depth step.
-   At depth 0 (the tile the player stands in) scale = 1.0 (full canvas).
-   Each step further away multiplies by PERSP_SCALE, making it smaller. */
+const VIEW_DEPTH  = 5;
 const PERSP_SCALE = 0.55;
-
-/* Precompute the screen rectangles for each depth 0..VIEW_DEPTH.
-   rect[d] = { x1, y1, x2, y2 } corners of the "frame" at depth d.
-   We recalculate these when the canvas is resized.             */
-let depthRects = [];
+let   depthRects  = [];
 
 function buildDepthRects() {
   depthRects = [];
-  const S = canvas.width;          // canvas is square, S×S
-  const cx = S / 2;
-  const cy = S / 2;
-  const maxHalf = S / 2;           // half-size at depth 0 (edges of canvas)
-
+  const S = canvas.width, cx = S/2, cy = S/2, maxHalf = S/2;
   for (let d = 0; d <= VIEW_DEPTH; d++) {
-    /* scale shrinks with depth: 0.55^d */
-    const scale = Math.pow(PERSP_SCALE, d);
-    const hw = maxHalf * scale;    // half-width
-    const hh = maxHalf * scale;    // half-height (square canvas → same)
-    depthRects.push({
-      x1: cx - hw,  y1: cy - hh,  // top-left
-      x2: cx + hw,  y2: cy + hh,  // bottom-right
-    });
+    const s = Math.pow(PERSP_SCALE, d);
+    depthRects.push({ x1:cx-maxHalf*s, y1:cy-maxHalf*s, x2:cx+maxHalf*s, y2:cy+maxHalf*s });
   }
 }
 
-/* ════════════════════════════════════════════════════════════
-   TILE HELPERS
-   ════════════════════════════════════════════════════════════ */
-
-/*
- * getTile — return the tile value at (col, row) on the current level.
- * Out-of-bounds coordinates return TILE_WALL (treats edges as solid).
- */
 function getTile(col, row) {
   const map = LEVELS[player.level].map;
-  if (row < 0 || row >= map.length || col < 0 || col >= map[0].length) {
-    return TILE_WALL;
-  }
+  if (row<0||row>=map.length||col<0||col>=map[0].length) return TILE_WALL;
   return map[row][col];
 }
 
-/*
- * isWall — returns true if (col, row) blocks movement or line-of-sight.
- *
- * This replaces the original single-map version.  The only changes are:
- *   1. It reads from LEVELS[player.level].map instead of the global MAP.
- *   2. It uses the TILE_WALL constant instead of the bare number 1.
- *   3. Stair tiles (2 and 3) return false — they are walkable floor.
- *
- * The renderer and moveForward() call this exactly as before; they don't
- * need to know anything about levels or tile types themselves.
- */
-function isWall(col, row) {
-  return getTile(col, row) === TILE_WALL;
-}
+function isWall(col, row) { return getTile(col, row) === TILE_WALL; }
 
-/* ── Helper: fill a quadrilateral with 4 corner points ──
-   Points are { x, y } objects in canvas space.            */
 function fillQuad(p0, p1, p2, p3) {
   ctx.beginPath();
-  ctx.moveTo(p0.x, p0.y);
-  ctx.lineTo(p1.x, p1.y);
-  ctx.lineTo(p2.x, p2.y);
-  ctx.lineTo(p3.x, p3.y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y);
+  ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
 }
 
-/* ════════════════════════════════════════════════════════════
-   STAIR GLYPH RENDERER
-   ════════════════════════════════════════════════════════════
-   Draws a wireframe staircase symbol into a rectangle on the canvas.
-   Called from the main render loop when a stair tile is directly
-   ahead of the player (in place of the front-wall fill).
-
-   rect      — { x1, y1, x2, y2 } the "far" depth rectangle to draw into
-   stairType — TILE_STAIR_DOWN or TILE_STAIR_UP
-
-   The visual idea:
-     • STAIR_DOWN: horizontal step lines occupy the LOWER half of the rect,
-       getting narrower (more inset) as they recede — like looking down
-       into a stairwell from the top.
-     • STAIR_UP: same but lines occupy the UPPER half — looking up.
-
-   Each step line is also slightly shorter than the one "closer" to you,
-   suggesting the perspective of receding stairs.
-*/
 function drawStairGlyph(rect, stairType) {
-  const { x1, y1, x2, y2 } = rect;
-  const w = x2 - x1;
-  const h = y2 - y1;
-
-  /* Dark tinted background — same treatment as a front wall */
-  ctx.fillStyle = "#000d00";
-  ctx.strokeStyle = "#00ff00";
-  ctx.beginPath();
-  ctx.rect(x1, y1, w, h);
-  ctx.fill();
-  ctx.stroke();
-
-  /* Draw N horizontal step lines.
-     i=0 is the widest/nearest step; i=N-1 is the narrowest/farthest. */
-  const N = 5;
-  ctx.beginPath();
-  ctx.strokeStyle = "#00ff00";
-
-  for (let i = 0; i < N; i++) {
-    /* frac: 0 = nearest step (wide), 1 = farthest step (narrow) */
-    const frac = i / (N - 1);
-
-    /* Horizontal inset increases with frac (perspectival narrowing).
-       Min inset is 4% of width so lines don't touch the border.     */
-    const inset = w * (0.04 + 0.38 * frac);
-
-    /* Vertical position:
-       For STAIR_DOWN, steps start near the bottom and rise toward centre.
-       For STAIR_UP,   steps start near the top   and fall toward centre.
-       Using 60% of the half-height keeps lines within the appropriate half. */
-    let lineY;
-    if (stairType === TILE_STAIR_DOWN) {
-      /* y2 is the bottom edge; subtract a small margin, then step upward */
-      lineY = y2 - h * 0.06 - h * 0.50 * frac;
-    } else {
-      /* y1 is the top edge; add a small margin, then step downward */
-      lineY = y1 + h * 0.06 + h * 0.50 * frac;
-    }
-
-    ctx.moveTo(x1 + inset, lineY);
-    ctx.lineTo(x2 - inset, lineY);
+  const {x1,y1,x2,y2} = rect, w=x2-x1, h=y2-y1;
+  ctx.fillStyle="#000d00"; ctx.strokeStyle="#00ff00";
+  ctx.beginPath(); ctx.rect(x1,y1,w,h); ctx.fill(); ctx.stroke();
+  const N=5;
+  ctx.beginPath(); ctx.strokeStyle="#00ff00";
+  for (let i=0;i<N;i++) {
+    const frac=i/(N-1), inset=w*(0.04+0.38*frac);
+    const lineY = stairType===TILE_STAIR_DOWN
+      ? y2-h*0.06-h*0.50*frac
+      : y1+h*0.06+h*0.50*frac;
+    ctx.moveTo(x1+inset,lineY); ctx.lineTo(x2-inset,lineY);
   }
-
   ctx.stroke();
-
-  /* Small directional arrow in the centre of the rect.
-     ▼ for down-stairs, ▲ for up-stairs.  Sized to fit the rectangle. */
-  const arrowSize = Math.max(8, h * 0.18);
-  ctx.font = `${arrowSize}px "Courier New"`;
-  ctx.fillStyle = "#00ff00";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const arrowChar = (stairType === TILE_STAIR_DOWN) ? "▼" : "▲";
-  /* Place arrow in the half of the rect that ISN'T occupied by steps */
-  const arrowY = (stairType === TILE_STAIR_DOWN)
-    ? y1 + h * 0.25   // upper portion (steps are in lower)
-    : y2 - h * 0.25;  // lower portion (steps are in upper)
-  ctx.fillText(arrowChar, x1 + w / 2, arrowY);
+  const arrowSize=Math.max(8,h*0.18);
+  ctx.font=`${arrowSize}px "Courier New"`; ctx.fillStyle="#00ff00";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText(
+    stairType===TILE_STAIR_DOWN?"▼":"▲",
+    x1+w/2,
+    stairType===TILE_STAIR_DOWN ? y1+h*0.25 : y2-h*0.25
+  );
 }
 
-/* ── Main render function ── */
 function render() {
-  buildDepthRects();   // recalc if canvas was resized
+  buildDepthRects();
+  const S=canvas.width;
+  ctx.fillStyle="#000000"; ctx.fillRect(0,0,S,S);
+  ctx.strokeStyle="#00ff00"; ctx.fillStyle="#000000"; ctx.lineWidth=1.5;
 
-  const S = canvas.width;
+  const fd=DIRECTIONS[player.dir];
+  const rd=DIRECTIONS[(player.dir+1)%4];
 
-  /* Clear to black */
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, S, S);
-
-  /* All lines and fills use phosphor green */
-  ctx.strokeStyle = "#00ff00";
-  ctx.fillStyle   = "#000000";   // walls are hollow (black fill, green outline)
-  ctx.lineWidth   = 1.5;
-
-  /* Direction vectors:
-     forward (fd) — the direction the player faces
-     right   (rd) — 90° clockwise from forward
-  */
-  const fd = DIRECTIONS[player.dir];
-  const rd = DIRECTIONS[(player.dir + 1) % 4];   // right = dir+1 mod 4
-
-  /* Walk forward from the player's position and draw each depth slice.
-     We draw from FAR to NEAR so closer walls paint over farther ones. */
-  for (let d = VIEW_DEPTH - 1; d >= 0; d--) {
-    /* Map tile at this depth along the forward axis */
-    const tx = player.x + fd.dx * d;
-    const ty = player.y + fd.dy * d;
-
-    /* Screen rectangles at this depth and one step closer */
-    const far  = depthRects[d + 1];   // smaller rect (further away)
-    const near = depthRects[d];       // larger rect  (closer)
-
-    /* ── FRONT WALL / STAIR ──
-       Check the tile ONE step further ahead.                          */
-    const frontX = tx + fd.dx;
-    const frontY = ty + fd.dy;
-    if (isWall(frontX, frontY)) {
-      /* Solid wall: fill the far rectangle with a dark tint */
-      ctx.fillStyle = "#001a00";
-      ctx.strokeStyle = "#00ff00";
-      ctx.beginPath();
-      ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
-      ctx.fill();
-      ctx.stroke();
+  for (let d=VIEW_DEPTH-1; d>=0; d--) {
+    const tx=player.x+fd.dx*d, ty=player.y+fd.dy*d;
+    const far=depthRects[d+1], near=depthRects[d];
+    const fx=tx+fd.dx, fy=ty+fd.dy;
+    if (isWall(fx,fy)) {
+      ctx.fillStyle="#001a00"; ctx.strokeStyle="#00ff00";
+      ctx.beginPath(); ctx.rect(far.x1,far.y1,far.x2-far.x1,far.y2-far.y1); ctx.fill(); ctx.stroke();
     } else {
-      /* Not a wall — check if it's a staircase tile and draw the glyph.
-         (Open floor tiles need no special drawing here.)               */
-      const frontTile = getTile(frontX, frontY);
-      if (frontTile === TILE_STAIR_DOWN || frontTile === TILE_STAIR_UP) {
-        drawStairGlyph(far, frontTile);
-      }
+      const ft=getTile(fx,fy);
+      if (ft===TILE_STAIR_DOWN||ft===TILE_STAIR_UP) drawStairGlyph(far,ft);
     }
-
-    /* ── LEFT WALL ──
-       The tile to the LEFT of the current forward tile.
-       "left" is the direction OPPOSITE to right.                   */
-    const leftX = tx - rd.dx;
-    const leftY = ty - rd.dy;
-    if (isWall(leftX, leftY)) {
-      /* Draw a trapezoid connecting the left edges of near and far rects */
-      ctx.fillStyle = "#001400";
-      ctx.strokeStyle = "#00ff00";
-      fillQuad(
-        { x: near.x1, y: near.y1 },   // near top-left
-        { x: far.x1,  y: far.y1  },   // far  top-left
-        { x: far.x1,  y: far.y2  },   // far  bottom-left
-        { x: near.x1, y: near.y2 }    // near bottom-left
-      );
+    const lx=tx-rd.dx, ly=ty-rd.dy;
+    if (isWall(lx,ly)) {
+      ctx.fillStyle="#001400"; ctx.strokeStyle="#00ff00";
+      fillQuad({x:near.x1,y:near.y1},{x:far.x1,y:far.y1},{x:far.x1,y:far.y2},{x:near.x1,y:near.y2});
     }
-
-    /* ── RIGHT WALL ── */
-    if (isWall(tx + rd.dx, ty + rd.dy)) {
-      ctx.fillStyle = "#001400";
-      ctx.strokeStyle = "#00ff00";
-      fillQuad(
-        { x: near.x2, y: near.y1 },   // near top-right
-        { x: far.x2,  y: far.y1  },   // far  top-right
-        { x: far.x2,  y: far.y2  },   // far  bottom-right
-        { x: near.x2, y: near.y2 }    // near bottom-right
-      );
+    if (isWall(tx+rd.dx,ty+rd.dy)) {
+      ctx.fillStyle="#001400"; ctx.strokeStyle="#00ff00";
+      fillQuad({x:near.x2,y:near.y1},{x:far.x2,y:far.y1},{x:far.x2,y:far.y2},{x:near.x2,y:near.y2});
     }
-
-    /* ── CORRIDOR FRAME LINES ──
-       Draw the 4 lines connecting near rect corners to far rect corners.
-       These give the receding-corridor "tunnel" effect.             */
-    ctx.strokeStyle = "#00ff00";
-    ctx.beginPath();
-    // Top-left edge
-    ctx.moveTo(near.x1, near.y1); ctx.lineTo(far.x1, far.y1);
-    // Top-right edge
-    ctx.moveTo(near.x2, near.y1); ctx.lineTo(far.x2, far.y1);
-    // Bottom-left edge
-    ctx.moveTo(near.x1, near.y2); ctx.lineTo(far.x1, far.y2);
-    // Bottom-right edge
-    ctx.moveTo(near.x2, near.y2); ctx.lineTo(far.x2, far.y2);
+    ctx.strokeStyle="#00ff00"; ctx.beginPath();
+    ctx.moveTo(near.x1,near.y1); ctx.lineTo(far.x1,far.y1);
+    ctx.moveTo(near.x2,near.y1); ctx.lineTo(far.x2,far.y1);
+    ctx.moveTo(near.x1,near.y2); ctx.lineTo(far.x1,far.y2);
+    ctx.moveTo(near.x2,near.y2); ctx.lineTo(far.x2,far.y2);
     ctx.stroke();
-
-    /* Draw the far rectangle outline (the "end" of this corridor slice) */
-    ctx.beginPath();
-    ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
-    ctx.stroke();
+    ctx.beginPath(); ctx.rect(far.x1,far.y1,far.x2-far.x1,far.y2-far.y1); ctx.stroke();
   }
+  const n0=depthRects[0];
+  ctx.beginPath(); ctx.rect(n0.x1,n0.y1,n0.x2-n0.x1,n0.y2-n0.y1); ctx.stroke();
 
-  /* Draw the near (innermost) rectangle — the immediate surroundings */
-  const near0 = depthRects[0];
-  ctx.strokeStyle = "#00ff00";
-  ctx.beginPath();
-  ctx.rect(near0.x1, near0.y1, near0.x2 - near0.x1, near0.y2 - near0.y1);
-  ctx.stroke();
-
-  /* Update UI elements that depend on player state */
   updateStatus();
   updateStairButton();
 }
 
-/* ════════════════════════════════════════════════════════════
-   STATUS BAR
-   ════════════════════════════════════════════════════════════ */
 function updateStatus() {
-  const dir   = DIRECTIONS[player.dir];
-  /* Display level as 1-indexed (more natural for players than 0-indexed) */
-  const lvlNum = player.level + 1;
+  const dir=DIRECTIONS[player.dir];
   document.getElementById("status").textContent =
-    `LEVEL ${lvlNum}: ${LEVELS[player.level].name}  ` +
-    `X:${player.x}  Y:${player.y}  ${dir.name}`;
+    `LEVEL ${player.level+1}: ${LEVELS[player.level].name}  X:${player.x}  Y:${player.y}  ${dir.name}`;
 }
 
-/* ════════════════════════════════════════════════════════════
-   STAIR BUTTON
-   ════════════════════════════════════════════════════════════
-   The stair button is only shown when the player is standing
-   on a stair tile.  Its label changes to match the direction.
-*/
 function updateStairButton() {
-  const tile      = getTile(player.x, player.y);
-  const wrap      = document.getElementById("stair-wrap");
-  const btn       = document.getElementById("btn-stairs");
-  const onStairs  = (tile === TILE_STAIR_DOWN || tile === TILE_STAIR_UP);
-
-  wrap.style.display = onStairs ? "block" : "none";
-
-  if (tile === TILE_STAIR_DOWN) {
-    btn.textContent = "DESCEND ▼";
-  } else if (tile === TILE_STAIR_UP) {
-    btn.textContent = "ASCEND ▲";
-  }
+  const tile=getTile(player.x,player.y);
+  const wrap=document.getElementById("stair-wrap");
+  const btn =document.getElementById("btn-stairs");
+  const on  =(tile===TILE_STAIR_DOWN||tile===TILE_STAIR_UP);
+  wrap.style.display=on?"block":"none";
+  if (tile===TILE_STAIR_DOWN) btn.textContent="DESCEND ▼";
+  else if (tile===TILE_STAIR_UP) btn.textContent="ASCEND ▲";
 }
 
 /* ════════════════════════════════════════════════════════════
    LEVEL TRANSITIONS
-   ════════════════════════════════════════════════════════════
-   changeLevel(direction) moves the player to an adjacent level.
-
-   direction =  1 → descend (go deeper, level index increases)
-   direction = -1 → ascend  (go up,     level index decreases)
-
-   The function:
-     1. Checks the player is on the correct stair type.
-     2. Checks the target level exists.
-     3. Reads the entry point from the target level's definition.
-     4. Moves the player there and redraws.
-
-   Entry points are stored directly in the LEVELS array so you
-   don't have to search the map for a stair tile — you simply
-   declare "when arriving from above, start at (x, y, dir)."
-*/
+   ════════════════════════════════════════════════════════════ */
 function changeLevel(direction) {
-  const tile       = getTile(player.x, player.y);
-  const targetIdx  = player.level + direction;
-
-  /* Guard: must be on the right stair type */
-  if (direction === 1 && tile !== TILE_STAIR_DOWN) return;
-  if (direction === -1 && tile !== TILE_STAIR_UP)  return;
-
-  /* Guard: target level must exist */
-  if (targetIdx < 0 || targetIdx >= LEVELS.length) return;
-
-  const targetLevel = LEVELS[targetIdx];
-
-  /* Choose the arrival entry point based on which direction we're travelling.
-     Going DOWN → arrive at the target level's entryFromAbove point
-                  (which sits on a STAIR_UP tile so we can come back).
-     Going UP   → arrive at the target level's entryFromBelow point
-                  (which sits on a STAIR_DOWN tile so we can go back down). */
-  const entry = (direction === 1)
-    ? targetLevel.entryFromAbove
-    : targetLevel.entryFromBelow;
-
-  /* Safety check — should never be null if the map is designed correctly,
-     but let's be graceful rather than crash with a bad map.              */
+  const tile=getTile(player.x,player.y);
+  const targetIdx=player.level+direction;
+  if (direction=== 1&&tile!==TILE_STAIR_DOWN) return;
+  if (direction===-1&&tile!==TILE_STAIR_UP)   return;
+  if (targetIdx<0||targetIdx>=LEVELS.length)  return;
+  const entry=(direction===1)?LEVELS[targetIdx].entryFromAbove:LEVELS[targetIdx].entryFromBelow;
   if (!entry) return;
-
-  /* Move the player */
-  player.level = targetIdx;
-  player.x     = entry.x;
-  player.y     = entry.y;
-  player.dir   = entry.dir;
-
+  player.level=targetIdx; player.x=entry.x; player.y=entry.y; player.dir=entry.dir;
+  syncDungeonToGS();
   render();
 }
 
-/* Convenience wrapper called by the stair button and by keyboard input.
-   Reads the tile under the player and picks the right direction.       */
 function useStairs() {
-  const tile = getTile(player.x, player.y);
-  if (tile === TILE_STAIR_DOWN) changeLevel(1);
-  if (tile === TILE_STAIR_UP)   changeLevel(-1);
+  const tile=getTile(player.x,player.y);
+  if (tile===TILE_STAIR_DOWN) changeLevel(1);
+  if (tile===TILE_STAIR_UP)   changeLevel(-1);
 }
 
 /* ════════════════════════════════════════════════════════════
    MOVEMENT
    ════════════════════════════════════════════════════════════ */
-
-/* Move the player forward or backward along their facing axis.
-   step =  1 → forward,  -1 → backward                        */
 function moveForward(step) {
-  const fd = DIRECTIONS[player.dir];
-  const nx = player.x + fd.dx * step;
-  const ny = player.y + fd.dy * step;
-  if (!isWall(nx, ny)) {
-    player.x = nx;
-    player.y = ny;
+  const fd=DIRECTIONS[player.dir];
+  const nx=player.x+fd.dx*step, ny=player.y+fd.dy*step;
+  if (!isWall(nx,ny)) {
+    player.x=nx; player.y=ny;
+    syncDungeonToGS();
     render();
   }
 }
 
-/* Rotate the player left or right.
-   delta = -1 → left (counter-clockwise),  +1 → right (clockwise) */
 function rotate(delta) {
-  /* Add delta, wrap around 0-3 */
-  player.dir = (player.dir + 4 + delta) % 4;
+  player.dir=(player.dir+4+delta)%4;
+  syncDungeonToGS();
   render();
 }
 
 /* ════════════════════════════════════════════════════════════
-   INPUT — ON-SCREEN BUTTONS
+   GS ↔ DUNGEON SYNC
    ════════════════════════════════════════════════════════════
-   We use both "click" (desktop) and "touchstart" (mobile) so
-   there is no 300ms tap delay on phones.
+   syncDungeonToGS() — copy player → GS, then autosave.
+                        Called after every step or turn.
+   enterDungeon()    — copy GS → player, show dungeon screen.
+                        Called from town or profile.
 */
-
-function addButtonHandler(id, action) {
-  const btn = document.getElementById(id);
-
-  /* Desktop click */
-  btn.addEventListener("click", action);
-
-  /* Mobile touch — preventDefault stops the "ghost click" that
-     browsers fire ~300ms after touchstart to maintain compatibility */
-  btn.addEventListener("touchstart", (e) => {
-    e.preventDefault();
-    action();
-    btn.classList.add("pressed");
-  }, { passive: false });
-
-  btn.addEventListener("touchend", () => {
-    btn.classList.remove("pressed");
-  });
+function syncDungeonToGS() {
+  GS.dungeon.level=player.level; GS.dungeon.x=player.x;
+  GS.dungeon.y=player.y; GS.dungeon.dir=player.dir;
+  autoSave();
 }
 
-addButtonHandler("btn-fwd",    () => moveForward(1));
-addButtonHandler("btn-back",   () => moveForward(-1));
-addButtonHandler("btn-lt",     () => rotate(-1));
-addButtonHandler("btn-rt",     () => rotate(1));
-addButtonHandler("btn-stairs", () => useStairs());
+function enterDungeon() {
+  player.level=GS.dungeon.level; player.x=GS.dungeon.x;
+  player.y=GS.dungeon.y;         player.dir=GS.dungeon.dir;
+  showScreen("dungeon");
+  resizeCanvas();
+}
 
 /* ════════════════════════════════════════════════════════════
-   INPUT — KEYBOARD (DESKTOP / TESTING)
-   ════════════════════════════════════════════════════════════
-   Arrow keys: movement (unchanged from v1).
-   >  or  .  : descend stairs (roguelike convention: > = go down)
-   <  or  ,  : ascend  stairs (roguelike convention: < = go up)
-*/
-document.addEventListener("keydown", (e) => {
-  switch (e.key) {
+   INPUT — BUTTONS + KEYBOARD
+   ════════════════════════════════════════════════════════════ */
+function addButtonHandler(id, action) {
+  const btn=document.getElementById(id);
+  btn.addEventListener("click", action);
+  btn.addEventListener("touchstart",(e)=>{
+    e.preventDefault(); action(); btn.classList.add("pressed");
+  },{passive:false});
+  btn.addEventListener("touchend",()=>{ btn.classList.remove("pressed"); });
+}
+
+addButtonHandler("btn-fwd",    ()=>moveForward(1));
+addButtonHandler("btn-back",   ()=>moveForward(-1));
+addButtonHandler("btn-lt",     ()=>rotate(-1));
+addButtonHandler("btn-rt",     ()=>rotate(1));
+addButtonHandler("btn-stairs", ()=>useStairs());
+
+document.addEventListener("keydown",(e)=>{
+  switch(e.key) {
     case "ArrowUp":    moveForward(1);  e.preventDefault(); break;
     case "ArrowDown":  moveForward(-1); e.preventDefault(); break;
     case "ArrowLeft":  rotate(-1);      e.preventDefault(); break;
@@ -762,10 +739,861 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ════════════════════════════════════════════════════════════
+   TOWN SCREEN
+   ════════════════════════════════════════════════════════════
+   UI-level state — these are not persisted in GS because they
+   describe display choices, not game state.  They reset each
+   time enterTown() is called.
+*/
+let townTab         = "shop";
+let townShopFilter  = "weapons";
+let townSelectedId  = null;    // which party member is selected in the shop
+let townHireCounter = 0;       // increments with each hire to generate unique IDs
+let townRecruits    = [];      // populated once per page load by initTownRecruits()
+
+/* Set up the tavern's roster.  Anyone marked available:false has been
+   hired this session; they stay gone until the page is reloaded.    */
+function initTownRecruits() {
+  townRecruits = [
+    { id:"r1", name:"Gareth", race:"Human",  raceKey:"human",  cls:"fighter", clsLabel:"Fighter",
+      stats:{ str:16, dex:11, con:14, int:9,  wis:10 }, cost:100, available:true },
+    { id:"r2", name:"Lyra",   race:"Elf",    raceKey:"elf",    cls:"mage",    clsLabel:"Mage",
+      stats:{ str:8,  dex:13, con:7,  int:15, wis:10 }, cost:100, available:true },
+    { id:"r3", name:"Brock",  race:"Dwarf",  raceKey:"dwarf",  cls:"fighter", clsLabel:"Fighter",
+      stats:{ str:15, dex:9,  con:16, int:7,  wis:10 }, cost:100, available:true },
+    { id:"r4", name:"Pip",    race:"Hobbit", raceKey:"hobbit", cls:"thief",   clsLabel:"Thief",
+      stats:{ str:7,  dex:16, con:9,  int:11, wis:12 }, cost:100, available:true },
+  ];
+}
+
+/* ── NAVIGATION ──────────────────────────────────────────── */
+
+function enterTown() {
+  /* Select the first active party member as the shop default */
+  const first = GS.party.find(p => p.status === "active") || GS.party[0];
+  townSelectedId = first ? first.id : null;
+  townTab        = "shop";
+  townShopFilter = "weapons";
+  setTownLog("");
+  showScreen("town");
+  renderTown();
+}
+
+function backToProfile() {
+  /* showScreen sets GS.screen = "profile"; autoSave captures that. */
+  showScreen("profile");
+  autoSave();
+  renderProfileScreen();
+}
+
+/* ── TOWN HELPERS ────────────────────────────────────────── */
+function townGetChar(id) { return GS.party.find(p => p.id === id); }
+function townSelChar()   { return townGetChar(townSelectedId); }
+
+function townSelectChar(id) { townSelectedId = id; renderTown(); }
+function townSelectTab(t)   { townTab = t; setTownLog(""); renderTown(); }
+function townSetFilter(f)   { townShopFilter = f; renderTown(); }
+
+function setTownLog(msg, cls) {
+  const el = document.getElementById("town-log");
+  if (!el) return;
+  el.textContent = msg;
+  el.className   = cls || "";
+}
+
+/* ── MAIN RENDER ─────────────────────────────────────────── */
+function renderTown() {
+  renderTownGold();
+  renderTownNav();
+  renderTownParty();
+  switch (townTab) {
+    case "shop":     renderTownShop();     break;
+    case "temple":   renderTownTemple();   break;
+    case "inn":      renderTownInn();      break;
+    case "training": renderTownTraining(); break;
+    case "tavern":   renderTownTavern();   break;
+    case "dungeon":  renderTownDungeon();  break;
+  }
+}
+
+function renderTownGold() {
+  const el = document.getElementById("town-gold");
+  if (el) el.textContent = GS.gold.toLocaleString();
+}
+
+function renderTownNav() {
+  const tabs = [
+    { id:"shop",     label:"SHOP" },
+    { id:"temple",   label:"TEMPLE" },
+    { id:"inn",      label:"INN" },
+    { id:"training", label:"TRAINING" },
+    { id:"tavern",   label:"TAVERN" },
+    { id:"dungeon",  label:"ENTER DUNGEON", extra:"primary" },
+  ];
+  document.getElementById("town-nav").innerHTML = tabs.map(t => {
+    const sel = townTab === t.id ? " selected" : "";
+    return '<button class="cmd ' + (t.extra || "") + sel + '" ' +
+           'onclick="townSelectTab(\'' + t.id + '\')">' + t.label + "</button>";
+  }).join("");
+}
+
+function renderTownParty() {
+  document.getElementById("town-party").innerHTML = GS.party.map(c => {
+    const sel   = townSelectedId === c.id ? " psel"  : "";
+    const down  = c.status === "down"     ? " pdown" : "";
+    const hpPct = Math.max(0, Math.round((c.hp / c.maxHp) * 100));
+    const downTag = c.status === "down"
+      ? ' <span style="color:var(--red)">[DOWN]</span>' : "";
+    const lvlUp = canLevelUp(c)
+      ? ' <span style="color:var(--amber)">▲</span>' : "";
+    const spLine = isCaster(c.cls)
+      ? '<br><span style="color:var(--blue);font-size:0.75rem">SP ' +
+        c.spellUses + "/" + c.spellUsesMax + "</span>"
+      : "";
+    return '<div class="party-card' + sel + down + '" data-id="' + c.id + '" ' +
+           'onclick="townSelectChar(this.dataset.id)">' +
+      '<div class="pname">' + c.name + downTag + "</div>" +
+      '<div class="pinfo">Lv' + c.level + " " + c.race + " " + c.clsLabel + lvlUp + "</div>" +
+      '<div class="pinfo" style="margin-top:3px">HP ' +
+        '<span class="hp-bar"><span class="hp-fill ' + hpCls(c) + '" ' +
+        'style="width:' + hpPct + '%"></span></span> ' + c.hp + "/" + c.maxHp + spLine +
+      "</div>" +
+      '<div class="pinfo"><span class="xp-bar"><span class="xp-fill" ' +
+      'style="width:' + xpPct(c) + '%"></span></span> ' +
+      c.xp.toLocaleString() + " xp</div>" +
+    "</div>";
+  }).join("");
+}
+
+/* ── SHOP ────────────────────────────────────────────────── */
+function renderTownShop() {
+  const c    = townSelChar();
+  const list = townShopFilter === "weapons" ? WEAPONS : ARMORS;
+  const slot = townShopFilter === "weapons" ? "weapon" : "armor";
+
+  let h = '<div class="frame-label">IRONHAVEN ARMORY</div>';
+
+  h += '<div class="char-sel">' +
+    GS.party.map(p => {
+      const sel = townSelectedId === p.id ? " selected" : "";
+      const dis = p.status === "down" ? " disabled" : "";
+      return '<button class="cmd small' + sel + '"' + dis +
+             ' data-id="' + p.id + '" onclick="townSelectChar(this.dataset.id)">' +
+             p.name.toUpperCase() + "</button>";
+    }).join("") + "</div>";
+
+  h += '<div class="filter-tabs">' +
+    ["weapons","armor"].map(f =>
+      '<button class="cmd small' + (townShopFilter===f?" selected":"") +
+      '" onclick="townSetFilter(\'' + f + '\')">' + f.toUpperCase() + "</button>"
+    ).join("") + "</div>";
+
+  h += '<table class="items"><tr><th>ITEM</th><th>STAT</th><th></th><th>PRICE</th><th></th></tr>';
+  list.forEach(item => {
+    const usable   = c ? canUse(c.cls, item) : false;
+    const equipped = c && c[slot] && c[slot].id === item.id;
+    const rowCls   = equipped ? "is-equipped" : (!usable ? "cant-use" : "");
+    const stat     = townShopFilter === "weapons" ? item.dmg : "AC " + item.ac;
+    const btnDis   = (!c || !usable || equipped || c.status==="down") ? " disabled" : "";
+    h += '<tr class="' + rowCls + '">' +
+      "<td>" + item.name + "</td><td>" + stat + "</td>" +
+      '<td><span class="tier-badge">T' + item.tier + "</span></td>" +
+      "<td>" + item.price + "gp</td>" +
+      '<td><button class="cmd small"' + btnDis +
+      ' data-iid="' + item.id + '" onclick="townBuyItem(this.dataset.iid,\'' + townShopFilter + '\')">' +
+      (equipped ? "EQUIPPED" : "BUY") + "</button></td></tr>";
+  });
+  h += "</table>";
+
+  if (c) {
+    h += '<div class="equipped-section"><div class="frame-label" style="margin-top:0">EQUIPPED — ' + c.name.toUpperCase() + "</div>";
+    ["weapon","armor"].forEach(sl => {
+      const eq = c[sl];
+      const st = eq ? (sl==="weapon" ? eq.dmg : "AC " + eq.ac) : "";
+      h += '<div class="equip-row">' +
+        '<span class="equip-lbl">' + sl.toUpperCase() + "</span>" +
+        '<span class="equip-name">' + (eq ? eq.name + " (" + st + ")" : "(none)") + "</span>" +
+        (eq ? '<button class="cmd small danger" data-cid="' + c.id + '" data-sl="' + sl + '"' +
+              ' onclick="townSellItem(this.dataset.cid,this.dataset.sl)">SELL ' + sellPrice(eq) + "gp</button>" : "") +
+      "</div>";
+    });
+    h += "</div>";
+  }
+  document.getElementById("town-content").innerHTML = h;
+}
+
+function townBuyItem(itemId, listName) {
+  const list = listName === "weapons" ? WEAPONS : ARMORS;
+  const item = itemById(itemId, list);
+  const c    = townSelChar();
+  if (!item || !c) return;
+  if (c.status === "down")   { setTownLog(c.name + " is down — visit the Temple first.", "err"); return; }
+  if (!canUse(c.cls, item))  { setTownLog(c.clsLabel + "s cannot use " + item.name + ".", "err"); return; }
+  if (GS.gold < item.price)  { setTownLog("Need " + (item.price - GS.gold) + " more gold.", "err"); return; }
+  const slot = listName === "weapons" ? "weapon" : "armor";
+  const old  = c[slot];
+  let credit = 0, creditNote = "";
+  if (old && old.id !== item.id) {
+    credit = sellPrice(old);
+    creditNote = " (traded in " + old.name + " +" + credit + "gp)";
+  }
+  GS.gold   -= item.price - credit;
+  c[slot]    = { ...item };
+  if (slot === "armor") c.ac = item.ac - statMod(c.stats.dex);
+  autoSave();
+  setTownLog(c.name + " bought " + item.name + " for " + item.price + "gp." + creditNote, "ok");
+  renderTown();
+}
+
+function townSellItem(charId, slot) {
+  const c = townGetChar(charId);
+  if (!c || !c[slot]) return;
+  const sp = sellPrice(c[slot]);
+  const nm = c[slot].name;
+  GS.gold += sp;
+  c[slot]  = null;
+  if (slot === "armor") c.ac = 10;
+  autoSave();
+  setTownLog(c.name + " sold " + nm + " for " + sp + "gp.", "ok");
+  renderTown();
+}
+
+/* ── TEMPLE ──────────────────────────────────────────────── */
+function renderTownTemple() {
+  const down = GS.party.filter(c => c.status === "down");
+  let h = '<div class="frame-label">TEMPLE OF THE LIGHT</div>';
+  if (!down.length) {
+    h += '<p style="color:var(--green-dim)">All party members are on their feet. The priests nod approvingly.</p>';
+  } else {
+    h += '<p style="color:var(--green-dim)">Resurrection cost: 300 gp × level. Revived at half HP.</p>';
+    down.forEach(c => {
+      const cost = c.level * 300;
+      h += '<div class="temple-row">' +
+        '<span><span style="color:var(--red)">' + c.name + "</span>  Lv" + c.level + " " + c.clsLabel + "</span>" +
+        '<span style="color:var(--green-dim)">' + cost + "gp</span>" +
+        '<button class="cmd heal" ' + (GS.gold >= cost ? "" : "disabled") +
+        ' data-cid="' + c.id + '" onclick="townResurrect(this.dataset.cid)">RESURRECT</button>' +
+      "</div>";
+    });
+    if (!GS.party.some(c => c.status === "active"))
+      h += '<p style="color:var(--red-dim)">Entire party is down — hire from the Tavern.</p>';
+  }
+  document.getElementById("town-content").innerHTML = h;
+}
+
+function townResurrect(charId) {
+  const c    = townGetChar(charId);
+  const cost = c ? c.level * 300 : 0;
+  if (!c || c.status !== "down") return;
+  if (GS.gold < cost) { setTownLog("Need " + cost + "gp to resurrect " + c.name + ". Short " + (cost-GS.gold) + "gp.", "err"); return; }
+  GS.gold  -= cost;
+  c.hp      = Math.max(1, Math.floor(c.maxHp / 2));
+  c.status  = "active";
+  if (isCaster(c.cls)) c.spellUses = Math.floor(c.spellUsesMax / 2);
+  autoSave();
+  setTownLog(c.name + " resurrected at " + c.hp + " HP. Cost: " + cost + "gp.", "ok");
+  renderTown();
+}
+
+/* ── INN ─────────────────────────────────────────────────── */
+function renderTownInn() {
+  const active   = GS.party.filter(c => c.status === "active");
+  const needRest = active.some(c => c.hp < c.maxHp || (isCaster(c.cls) && c.spellUses < c.spellUsesMax));
+  let h = '<div class="frame-label">THE RUSTY FLAGON INN</div>';
+  h += '<p style="color:var(--green-dim)">A night\'s rest costs <span style="color:var(--amber)">50 gp</span> for the whole party.</p>';
+  h += '<p style="color:var(--green-dim)">Restores full HP and spell uses for all active members.</p>';
+  if (!needRest) h += '<p style="color:var(--green-dim)">Everyone is already at full strength.</p>';
+  active.forEach(c => {
+    const ok  = c.hp===c.maxHp && (!isCaster(c.cls)||c.spellUses===c.spellUsesMax);
+    const dim = ok ? "color:var(--line)" : "color:var(--green-dim)";
+    const sp  = isCaster(c.cls) ? "  SP " + c.spellUses + "/" + c.spellUsesMax : "";
+    h += '<div style="' + dim + ';margin-bottom:4px">' + c.name + " — HP " + c.hp + "/" + c.maxHp + sp + "</div>";
+  });
+  h += '<div style="margin-top:10px"><button class="cmd primary" ' +
+    (GS.gold < 50 || !needRest ? "disabled" : "") +
+    ' onclick="townRest()">REST (50 gp)</button></div>';
+  document.getElementById("town-content").innerHTML = h;
+}
+
+function townRest() {
+  const active = GS.party.filter(c => c.status === "active");
+  if (!active.length) { setTownLog("No active party members to rest.", "err"); return; }
+  if (GS.gold < 50)   { setTownLog("Need 50 gp to rest at the inn.", "err"); return; }
+  const full = active.every(c => c.hp===c.maxHp && (!isCaster(c.cls)||c.spellUses===c.spellUsesMax));
+  if (full)           { setTownLog("Everyone is already at full strength.", "err"); return; }
+  GS.gold -= 50;
+  active.forEach(c => { c.hp = c.maxHp; if (isCaster(c.cls)) c.spellUses = c.spellUsesMax; });
+  autoSave();
+  setTownLog("The party rests. HP and spell uses fully restored. Cost: 50 gp.", "ok");
+  renderTown();
+}
+
+/* ── TRAINING ────────────────────────────────────────────── */
+function renderTownTraining() {
+  let h = '<div class="frame-label">TRAINING GROUNDS</div>';
+  h += '<p style="color:var(--green-dim)">Visit here to advance when you have enough experience.</p>';
+  GS.party.forEach(c => {
+    const ready  = canLevelUp(c);
+    const next   = xpForLevel(c.level + 1);
+    const xpLeft = next === Infinity ? "MAX LEVEL" : (next - c.xp).toLocaleString() + " xp to next level";
+    const dim    = c.status === "down" ? "color:var(--red)" : "";
+    h += '<div class="train-row">' +
+      '<span class="train-name" style="' + dim + '">' + c.name + "</span>" +
+      '<span class="xp-info">Lv' + c.level + " &nbsp;" +
+        '<span class="xp-bar"><span class="xp-fill" style="width:' + xpPct(c) + '%"></span></span>' +
+        " " + c.xp.toLocaleString() + " xp &nbsp; " + xpLeft +
+      "</span>" +
+      '<button class="cmd small primary" ' + (ready ? "" : "disabled") +
+      ' data-cid="' + c.id + '" onclick="townLevelUp(this.dataset.cid)">' +
+      (c.level>=10 ? "MAX" : ready ? "LEVEL UP ▲" : "→ Lv" + (c.level+1)) +
+      "</button></div>";
+  });
+  document.getElementById("town-content").innerHTML = h;
+}
+
+function townLevelUp(charId) {
+  const c = townGetChar(charId);
+  if (!c || !canLevelUp(c)) return;
+  c.level++;
+  const hpGain = Math.max(1, roll(1, HIT_DIE[c.cls]) + statMod(c.stats.con));
+  c.maxHp += hpGain; c.hp += hpGain;
+  if (isCaster(c.cls)) { c.spellUsesMax = spellUsesMax(c); c.spellUses = c.spellUsesMax; }
+  const tbl   = c.cls === "mage" ? MAGE_SPELLS : PRIEST_SPELLS;
+  const spell = tbl[c.level];
+  let note = "";
+  if (spell && !c.spells.includes(spell)) { c.spells.push(spell); note = " New spell: " + spell + "!"; }
+  autoSave();
+  setTownLog(c.name + " advances to level " + c.level + "! +" + hpGain + " HP." + note, "ok");
+  renderTown();
+}
+
+/* ── TAVERN ──────────────────────────────────────────────── */
+function renderTownTavern() {
+  const avail = townRecruits.filter(r => r.available);
+  let h = '<div class="frame-label">THE RUSTY FLAGON — TAVERN</div>';
+  if (!avail.length) {
+    h += '<p style="color:var(--green-dim)">No adventurers available right now.</p>';
+  } else {
+    h += '<p style="color:var(--green-dim)">Hire fee: 100 gp. Recruits come with starting gear at level 1.</p>';
+    avail.forEach(r => {
+      const hp = Math.max(1, HIT_DIE[r.cls] + statMod(r.stats.con));
+      const ok = GS.party.length < 6 && GS.gold >= r.cost;
+      h += '<div class="recruit-card">' +
+        "<div><strong>" + r.name + "</strong> — " + r.race + " " + r.clsLabel + "<br>" +
+        '<span style="color:var(--green-dim);font-size:0.82rem">' +
+          "STR " + r.stats.str + " DEX " + r.stats.dex + " CON " + r.stats.con +
+          " INT " + r.stats.int + " WIS " + r.stats.wis + " &nbsp; ~" + hp + " HP" +
+        "</span></div>" +
+        '<button class="cmd primary" ' + (ok ? "" : "disabled") +
+        ' data-rid="' + r.id + '" onclick="townHire(this.dataset.rid)">HIRE ' + r.cost + " gp</button>" +
+      "</div>";
+    });
+  }
+  if (GS.party.length >= 6) h += '<p style="color:var(--amber)">Party is full (6/6).</p>';
+  document.getElementById("town-content").innerHTML = h;
+}
+
+function townHire(recruitId) {
+  if (GS.party.length >= 6) { setTownLog("Party is full (6/6).", "err"); return; }
+  const r = townRecruits.find(x => x.id === recruitId);
+  if (!r || !r.available) return;
+  if (GS.gold < r.cost)   { setTownLog("Need " + r.cost + " gp to hire " + r.name + ".", "err"); return; }
+
+  GS.gold -= r.cost;
+  townHireCounter++;
+
+  /* Starting gear follows the design-doc class defaults */
+  const startW = r.cls === "priest"  ? itemById("mace",       WEAPONS)
+               : r.cls === "fighter" ? itemById("shortsword",  WEAPONS)
+               :                       itemById("dagger",      WEAPONS);
+  const startA = r.cls === "mage" ? itemById("robes",   ARMORS)
+                                  : itemById("leather",  ARMORS);
+  const hp     = Math.max(1, HIT_DIE[r.cls] + statMod(r.stats.con));
+  const ac     = startA.ac - statMod(r.stats.dex);
+  const spMax  = isCaster(r.cls)
+    ? spellUsesMax({ cls:r.cls, level:1, stats:r.stats })
+    : 0;
+  const spells = r.cls === "mage"   ? ["Magic Missile"]
+               : r.cls === "priest" ? ["Cure Light Wounds"]
+               : [];
+
+  GS.party.push({
+    id: "hire" + townHireCounter, name: r.name,
+    race: r.race, raceKey: r.raceKey, cls: r.cls, clsLabel: r.clsLabel,
+    row: CLASSES[r.cls].row,
+    level:1, xp:0, hp, maxHp:hp, ac, status:"active",
+    stats: { ...r.stats },
+    weapon: { ...startW }, armor: { ...startA },
+    spells, spellUses:spMax, spellUsesMax:spMax,
+  });
+
+  r.available = false;   /* hide from tavern for the rest of this session */
+  autoSave();
+  setTownLog(r.name + " the " + r.race + " " + r.clsLabel + " hired for " + r.cost + " gp.", "ok");
+  renderTown();
+}
+
+/* ── DUNGEON ENTRANCE ────────────────────────────────────── */
+function renderTownDungeon() {
+  const active = GS.party.filter(c => c.status === "active");
+  let h = '<div class="frame-label">DUNGEON ENTRANCE — THE STAIRWAY DOWN</div>';
+  if (!active.length) {
+    h += '<p style="color:var(--red)">No active party members. Visit the Temple or Tavern first.</p>';
+  } else {
+    const returning = GS.dungeon.level > 0;
+    const dest = returning
+      ? "LEVEL " + (GS.dungeon.level+1) + ": " + LEVELS[GS.dungeon.level].name
+      : "LEVEL 1: " + LEVELS[0].name;
+    h += '<p style="color:var(--green-dim)">' +
+         active.length + " adventurer" + (active.length!==1?"s":"") +
+         " ready. " + (returning ? "Returning to " : "Descending to ") + dest + ".</p>";
+    h += '<div style="margin-top:10px">' +
+         '<button class="cmd primary" onclick="enterDungeon()">DESCEND ▼</button>' +
+         "</div>";
+  }
+  document.getElementById("town-content").innerHTML = h;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHARACTER CREATION SCREEN
+   ════════════════════════════════════════════════════════════
+   Uses RACES / CLASSES / WEAPONS / ARMORS from game.js.
+   Produces canonical character objects compatible with the
+   town and combat screens.
+*/
+const CC_POLISH_BASE  = 5;
+const CC_POLISH_HUMAN = 7;
+const CC_MAX_REROLLS  = 3;
+
+let ccDraft = {
+  race:        "human",
+  rawRolls:    {},
+  rolledStats: {},
+  stats:       {},
+  polish:      CC_POLISH_HUMAN,
+  rerollsLeft: CC_MAX_REROLLS,
+  cls:         null,
+};
+let ccParty  = [];
+let ccNextId = 1;
+
+/* ── NAVIGATION ── */
+function enterCreation() {
+  ccParty  = [];
+  ccNextId = 1;
+  showScreen("creation");
+  ccStartNewDraft("human");
+}
+
+function ccBackToProfile() {
+  GS.profileName = "";
+  GS.party       = [];
+  showScreen("profile");
+  renderProfileScreen();
+}
+
+/* ── DRAFT MANAGEMENT ── */
+function ccRollStats(raceKey) {
+  const mods = RACES[raceKey].mods;
+  const raw = {}, rolled = {};
+  ["str","dex","con","int","wis"].forEach(s => {
+    raw[s]    = roll(3, 6);
+    rolled[s] = Math.min(18, Math.max(6, raw[s] + mods[s]));
+  });
+  return { raw, rolled };
+}
+
+function ccStartNewDraft(raceKey) {
+  raceKey = raceKey || ccDraft.race;
+  ccDraft.race        = raceKey;
+  ccDraft.rerollsLeft = CC_MAX_REROLLS;
+  const { raw, rolled } = ccRollStats(raceKey);
+  ccDraft.rawRolls    = raw;
+  ccDraft.rolledStats = rolled;
+  ccDraft.stats       = { ...rolled };
+  ccDraft.polish      = raceKey === "human" ? CC_POLISH_HUMAN : CC_POLISH_BASE;
+  ccDraft.cls         = null;
+  renderCreation();
+}
+
+function ccSelectRace(raceKey) {
+  ccDraft.race = raceKey;
+  const mods   = RACES[raceKey].mods;
+  const rolled = {};
+  ["str","dex","con","int","wis"].forEach(s => {
+    rolled[s] = Math.min(18, Math.max(6, ccDraft.rawRolls[s] + mods[s]));
+  });
+  ccDraft.rolledStats = rolled;
+  ccDraft.stats       = { ...rolled };
+  ccDraft.polish      = raceKey === "human" ? CC_POLISH_HUMAN : CC_POLISH_BASE;
+  ccDraft.cls         = null;
+  renderCreation();
+}
+
+function ccReroll() {
+  if (ccDraft.rerollsLeft <= 0) return;
+  ccDraft.rerollsLeft--;
+  const { raw, rolled } = ccRollStats(ccDraft.race);
+  ccDraft.rawRolls    = raw;
+  ccDraft.rolledStats = rolled;
+  ccDraft.stats       = { ...rolled };
+  ccDraft.polish      = ccDraft.race === "human" ? CC_POLISH_HUMAN : CC_POLISH_BASE;
+  ccDraft.cls         = null;
+  setCCStatus("Stats rerolled. " + ccDraft.rerollsLeft +
+    " reroll" + (ccDraft.rerollsLeft !== 1 ? "s" : "") + " remaining.", "ok");
+  renderCreation();
+}
+
+function ccResetPolish() {
+  ccDraft.stats  = { ...ccDraft.rolledStats };
+  ccDraft.polish = ccDraft.race === "human" ? CC_POLISH_HUMAN : CC_POLISH_BASE;
+  ccDraft.cls    = null;
+  setCCStatus("Polish reset — rolled values restored.", "ok");
+  renderCreation();
+}
+
+function ccAdjustStat(stat, delta) {
+  const cur   = ccDraft.stats[stat];
+  const floor = ccDraft.rolledStats[stat];
+  if (delta > 0) {
+    if (ccDraft.polish <= 0 || cur >= 18) return;
+    ccDraft.stats[stat] = cur + 1;
+    ccDraft.polish--;
+  } else {
+    if (cur <= floor) return;
+    ccDraft.stats[stat] = cur - 1;
+    ccDraft.polish++;
+  }
+  if (ccDraft.cls && !ccQualifies(ccDraft.cls)) ccDraft.cls = null;
+  renderCreation();
+}
+
+function ccQualifies(clsKey) {
+  const req = CLASSES[clsKey].req;
+  return ccDraft.stats[req.stat] >= req.min;
+}
+
+function ccSelectClass(clsKey) {
+  if (!ccQualifies(clsKey)) return;
+  ccDraft.cls = clsKey;
+  renderCreation();
+}
+
+function ccComputePreview() {
+  if (!ccDraft.cls) return null;
+  const clsKey = ccDraft.cls;
+  const wId    = clsKey === "priest" ? "mace" : clsKey === "fighter" ? "shortsword" : "dagger";
+  const aId    = clsKey === "mage"   ? "robes" : "leather";
+  const weapon = itemById(wId, WEAPONS);
+  const armor  = itemById(aId, ARMORS);
+  const hp     = Math.max(1, CLASSES[clsKey].hitDie + statMod(ccDraft.stats.con));
+  const ac     = armor.ac - statMod(ccDraft.stats.dex);
+  const atk    = atkBonus({ cls: clsKey, level: 1, stats: ccDraft.stats });
+  const [nd, ds, dbon] = parseDmg(weapon.dmg);
+  const tb     = dbon + statMod(ccDraft.stats.str);
+  const dmgLabel = nd + "d" + ds + (tb > 0 ? "+" + tb : tb < 0 ? String(tb) : "");
+  return { hp, ac, atk, dmgLabel, weaponName: weapon.name, row: CLASSES[clsKey].row };
+}
+
+/* ── PARTY MANAGEMENT ── */
+function ccAddToParty() {
+  if (ccParty.length >= 6) { setCCStatus("Party is full (6/6).", "err"); return; }
+  const name = (document.getElementById("cc-name").value || "").trim();
+  if (!name)       { setCCStatus("Enter a name first.", "err"); return; }
+  if (!ccDraft.cls){ setCCStatus("Choose a qualifying class.", "err"); return; }
+
+  const clsKey  = ccDraft.cls;
+  const raceKey = ccDraft.race;
+  const wId     = clsKey === "priest" ? "mace" : clsKey === "fighter" ? "shortsword" : "dagger";
+  const aId     = clsKey === "mage"   ? "robes" : "leather";
+  const weapon  = { ...itemById(wId, WEAPONS) };
+  const armor   = { ...itemById(aId, ARMORS) };
+  const hp      = Math.max(1, CLASSES[clsKey].hitDie + statMod(ccDraft.stats.con));
+  const ac      = armor.ac - statMod(ccDraft.stats.dex);
+  const spMax   = isCaster(clsKey) ? spellUsesMax({ cls:clsKey, level:1, stats:ccDraft.stats }) : 0;
+  const spells  = clsKey === "mage"   ? ["Magic Missile"]
+                : clsKey === "priest" ? ["Cure Light Wounds"]
+                : [];
+
+  ccParty.push({
+    id:          "cc" + ccNextId++,
+    name,
+    race:        RACES[raceKey].label,
+    raceKey,
+    cls:         clsKey,
+    clsLabel:    CLASSES[clsKey].label,
+    row:         CLASSES[clsKey].row,
+    level:       1,
+    xp:          0,
+    hp,
+    maxHp:       hp,
+    ac,
+    status:      "active",
+    stats:       { ...ccDraft.stats },
+    weapon,
+    armor,
+    spells,
+    spellUses:    spMax,
+    spellUsesMax: spMax,
+  });
+
+  setCCStatus(name + " the " + RACES[raceKey].label + " " + CLASSES[clsKey].label + " joins the party!", "ok");
+  document.getElementById("cc-name").value = "";
+  ccStartNewDraft(raceKey);
+}
+
+function ccRemoveFromParty(id) {
+  ccParty = ccParty.filter(p => p.id !== id);
+  renderCreation();
+}
+
+function ccBeginAdventure() {
+  const logEl = document.getElementById("cc-begin-log");
+  if (!ccParty.length) { logEl.textContent = "Create at least one character first."; return; }
+  GS.party = ccParty;
+  autoSave();
+  logEl.textContent = "";
+  enterTown();
+}
+
+function setCCStatus(msg, cls) {
+  const el = document.getElementById("cc-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.className   = cls || "";
+}
+
+/* ── RENDER ── */
+function renderCreation() {
+  renderCCRaceBtns();
+  renderCCStatTable();
+  renderCCClassBtns();
+  renderCCPreview();
+  renderCCRoster();
+  const addBtn = document.getElementById("cc-add-btn");
+  if (addBtn) addBtn.disabled = ccParty.length >= 6;
+}
+
+function renderCCRaceBtns() {
+  const el = document.getElementById("cc-race-btns");
+  if (!el) return;
+  el.innerHTML = Object.keys(RACES).map(key => {
+    const sel = ccDraft.race === key ? " selected" : "";
+    return '<button class="cmd' + sel + '" onclick="ccSelectRace(\'' + key + '\')">' +
+           RACES[key].label.toUpperCase() + "</button>";
+  }).join("");
+}
+
+function renderCCStatTable() {
+  const el = document.getElementById("cc-stat-table");
+  if (!el) return;
+  const labels   = { str:"STR", dex:"DEX", con:"CON", int:"INT", wis:"WIS" };
+  const raceMods = RACES[ccDraft.race].mods;
+  let rows = "";
+  Object.keys(labels).forEach(stat => {
+    const val   = ccDraft.stats[stat];
+    const floor = ccDraft.rolledStats[stat];
+    const raw   = ccDraft.rawRolls[stat];
+    const mod   = raceMods[stat];
+    const modStr = mod === 0 ? ""
+      : mod > 0 ? " <span style='color:var(--green)'>(+" + mod + ")</span>"
+      :           " <span style='color:var(--amber)'>(" + mod + ")</span>";
+    const rollNote = '<span style="color:var(--green-dim);font-size:0.8rem"> rolled ' + raw + modStr + "</span>";
+    const canDown  = val > floor;
+    const canUp    = ccDraft.polish > 0 && val < 18;
+    rows += "<tr>" +
+      '<td class="stat-name">' + labels[stat] + "</td>" +
+      '<td class="stat-val">' + val + "</td>" +
+      '<td class="stat-mod">(' + fmtMod(statMod(val)) + ")</td>" +
+      '<td class="stat-btns">' +
+        '<button class="cmd small" onclick="ccAdjustStat(\'' + stat + '\',-1)"' +
+        (canDown ? "" : " disabled") + ">-</button> " +
+        '<button class="cmd small" onclick="ccAdjustStat(\'' + stat + '\', 1)"' +
+        (canUp   ? "" : " disabled") + ">+</button>" +
+      "</td>" +
+      "<td style='padding-left:10px'>" + rollNote + "</td>" +
+      "</tr>";
+  });
+  el.innerHTML = rows;
+
+  const poolEl    = document.getElementById("cc-pool");
+  if (poolEl) poolEl.textContent = ccDraft.polish;
+  const rerollBtn = document.getElementById("cc-reroll-btn");
+  if (rerollBtn) {
+    rerollBtn.textContent = "REROLL STATS (" + ccDraft.rerollsLeft + " left)";
+    rerollBtn.disabled    = ccDraft.rerollsLeft <= 0;
+  }
+}
+
+function renderCCClassBtns() {
+  const el = document.getElementById("cc-class-btns");
+  if (!el) return;
+  el.innerHTML = Object.keys(CLASSES).map(key => {
+    const ok  = ccQualifies(key);
+    const sel = ccDraft.cls === key ? " selected" : "";
+    return '<button class="cmd' + sel + '"' + (ok ? "" : " disabled") +
+           ' onclick="ccSelectClass(\'' + key + '\')">' + CLASSES[key].label.toUpperCase() + "</button>";
+  }).join("");
+}
+
+function renderCCPreview() {
+  const el = document.getElementById("cc-preview");
+  if (!el) return;
+  const p = ccComputePreview();
+  if (!p) {
+    el.innerHTML = '<span class="empty-note">Choose a qualifying class to preview stats.</span>';
+    return;
+  }
+  el.innerHTML =
+    "HP <span style='color:var(--green)'>" + p.hp + "</span> &nbsp; " +
+    "AC <span style='color:var(--green)'>" + p.ac + "</span> &nbsp; " +
+    "ATK <span style='color:var(--green)'>" + fmtMod(p.atk) + "</span> &nbsp; " +
+    "WEAPON <span style='color:var(--green)'>" + p.weaponName + " (" + p.dmgLabel + ")</span> &nbsp; " +
+    "ROW <span style='color:var(--green)'>" + p.row.toUpperCase() + "</span>";
+}
+
+function renderCCRoster() {
+  const countEl = document.getElementById("cc-roster-count");
+  const tableEl = document.getElementById("cc-roster");
+  if (!countEl || !tableEl) return;
+  countEl.textContent = ccParty.length;
+  if (!ccParty.length) {
+    tableEl.innerHTML = '<tr><td class="empty-note">No characters yet — build one above.</td></tr>';
+    return;
+  }
+  let rows = "<tr><th>#</th><th>NAME</th><th>RACE / CLASS</th><th>HP</th><th>AC</th><th>ATK</th><th>ROW</th><th></th></tr>";
+  ccParty.forEach((c, i) => {
+    rows += "<tr>" +
+      "<td>" + (i + 1) + ".</td>" +
+      "<td>" + c.name + "</td>" +
+      "<td>" + c.race + " " + c.clsLabel + "</td>" +
+      "<td>" + c.hp + "/" + c.maxHp + "</td>" +
+      "<td>" + c.ac + "</td>" +
+      "<td>" + fmtMod(atkBonus(c)) + "</td>" +
+      "<td>" + c.row.toUpperCase() + "</td>" +
+      '<td><button class="cmd small danger" data-cid="' + c.id + '"' +
+      ' onclick="ccRemoveFromParty(this.dataset.cid)">REMOVE</button></td>' +
+      "</tr>";
+  });
+  tableEl.innerHTML = rows;
+}
+
+/* ════════════════════════════════════════════════════════════
+   PROFILE SCREEN
+   ════════════════════════════════════════════════════════════ */
+function renderProfileScreen() {
+  const saves = listSaves();
+  let html = "";
+
+  html += '<div class="profile-title">Dungeon Descent</div>';
+  html += '<div class="profile-sub">— a retro dungeon crawler —</div>';
+
+  html += '<div class="profile-frame">';
+  html += '<div class="profile-frame-label">NEW GAME</div>';
+  html += '<div style="color:var(--green-dim);font-size:0.82rem;margin-bottom:10px">' +
+          'Quick-start with the premade party (Tor, Shadow, Aldric, Mialee) or build your own.</div>';
+  html += '<div class="profile-input-row">';
+  html +=   '<input id="profile-name" type="text" maxlength="20" placeholder="Enter save name..." autocomplete="off">';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+  html +=   '<button class="pcmd primary" onclick="startPremadeGame()">PREMADE PARTY ▶</button>';
+  html +=   '<button class="pcmd" onclick="startCustomGame()">CUSTOM PARTY ▶</button>';
+  html += '</div>';
+  html += '<div class="profile-log" id="profile-log"></div>';
+  html += '</div>';
+
+  if (saves.length > 0) {
+    html += '<div class="profile-frame">';
+    html += '<div class="profile-frame-label">SAVED PROFILES</div>';
+    saves.forEach((name, i) => {
+      html += '<div class="save-row">';
+      html +=   '<span class="save-name">' + escHtml(name) + "</span>";
+      html +=   '<button class="pcmd primary" data-i="' + i + '" onclick="continueGame(PROFILE_SAVES[this.dataset.i])">CONTINUE</button>';
+      html +=   '<button class="pcmd danger"  data-i="' + i + '" onclick="confirmDelete(PROFILE_SAVES[this.dataset.i])">DEL</button>';
+      html += "</div>";
+    });
+    html += "</div>";
+  }
+
+  html += '<div class="profile-version">v0.3 — stage 3 of n</div>';
+
+  document.getElementById("screen-profile").innerHTML = html;
+  window.PROFILE_SAVES = saves;
+
+  const inp = document.getElementById("profile-name");
+  if (inp) {
+    inp.focus();
+    inp.addEventListener("keydown", e => { if (e.key==="Enter") { e.preventDefault(); startPremadeGame(); } });
+  }
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function setProfileLog(msg, cls) {
+  const el = document.getElementById("profile-log");
+  if (el) { el.textContent = msg; el.className = "profile-log " + (cls||""); }
+}
+
+/* ── START NEW GAME ── */
+function getProfileNameInput() {
+  const input = document.getElementById("profile-name");
+  const name  = input ? input.value.trim() : "";
+  if (!name) { setProfileLog("Enter a name for your save profile.", "err"); return null; }
+  if (listSaves().includes(name)) {
+    if (!confirm('"' + name + '" already exists.\nStart over and overwrite it?')) return null;
+  }
+  return name;
+}
+
+function startPremadeGame() {
+  const name = getProfileNameInput();
+  if (!name) return;
+  GS.profileName = name;
+  GS.party       = makePremadeParty();
+  GS.gold        = 750;
+  GS.dungeon     = { level:0, x:LEVELS[0].entryFromAbove.x, y:LEVELS[0].entryFromAbove.y, dir:LEVELS[0].entryFromAbove.dir };
+  GS.combat      = null;
+  autoSave();
+  enterTown();
+}
+
+function startCustomGame() {
+  const name = getProfileNameInput();
+  if (!name) return;
+  GS.profileName = name;
+  GS.party       = [];
+  GS.gold        = 750;
+  GS.dungeon     = { level:0, x:LEVELS[0].entryFromAbove.x, y:LEVELS[0].entryFromAbove.y, dir:LEVELS[0].entryFromAbove.dir };
+  GS.combat      = null;
+  enterCreation();
+}
+
+/* ── CONTINUE SAVED GAME ── */
+function continueGame(name) {
+  if (!loadSave(name)) { setProfileLog('Could not load "' + name + '".', "err"); return; }
+  /* Route to the screen that was active when the game was last saved */
+  if (GS.screen === "dungeon") enterDungeon();
+  else enterTown();
+}
+
+/* ── DELETE SAVE ── */
+function confirmDelete(name) {
+  if (!confirm('Delete save "' + name + '"?\nThis cannot be undone.')) return;
+  deleteSave(name);
+  if (GS.profileName === name) GS.profileName = "";
+  renderProfileScreen();
+}
+
+/* ════════════════════════════════════════════════════════════
    STARTUP
    ════════════════════════════════════════════════════════════ */
 window.addEventListener("resize", resizeCanvas);
-resizeCanvas();   // sets canvas size and calls render() for the first time
+resizeCanvas();           /* size canvas while it's hidden — no visual effect */
+initTownRecruits();       /* populate tavern roster for this session */
+showScreen("profile");
+renderProfileScreen();
 </script>
 </body>
 </html>
