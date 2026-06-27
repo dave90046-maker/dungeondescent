@@ -254,6 +254,7 @@
       box-shadow:0 0 6px var(--green); touch-action:manipulation; transition:background 0.08s;
     }
     .btn:active, .btn.pressed { background: #003300; }
+    .btn:disabled { color: var(--line); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
     .btn-empty   { visibility: hidden; }
 
     #stair-wrap  { display:none; width:100%; max-width:320px; margin-top:6px; }
@@ -405,15 +406,21 @@
 /* ════════════════════════════════════════════════════════════
    DUNGEON — TILE CONSTANTS
    ════════════════════════════════════════════════════════════
-     0  TILE_FLOOR      — open, walkable passage
+     0  TILE_FLOOR      — open corridor (ENCOUNTER_RATE_HALLWAY per step)
      1  TILE_WALL       — solid stone, blocks movement and view
-     2  TILE_STAIR_DOWN — staircase going DEEPER (next level)
-     3  TILE_STAIR_UP   — staircase going UP    (previous level)
+     2  TILE_STAIR_DOWN — staircase going DEEPER (next level) — safe
+     3  TILE_STAIR_UP   — staircase going UP    (previous level) — safe
+     4  TILE_ROOM       — open room (ENCOUNTER_RATE_ROOM on first entry)
 */
 const TILE_FLOOR      = 0;
 const TILE_WALL       = 1;
 const TILE_STAIR_DOWN = 2;
 const TILE_STAIR_UP   = 3;
+const TILE_ROOM       = 4;
+
+/* ── Encounter rates ─────────────────────────────────────── */
+const ENCOUNTER_RATE_HALLWAY = 1/8;   // ~1-in-8 per corridor step
+const ENCOUNTER_RATE_ROOM    = 1/3;   // ~1-in-3 on first entry to a room
 
 /* ════════════════════════════════════════════════════════════
    DUNGEON LEVELS
@@ -431,14 +438,15 @@ const TILE_STAIR_UP   = 3;
 */
 const LEVELS = [
 
-  /* ── LEVEL 0: The Entry Hall ── */
+  /* ── LEVEL 0: The Entry Hall ──
+     Rooms: NE antechamber (rows 1-3, cols 5-8).            */
   {
     name: "THE ENTRY HALL",
     map: [
       [1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,1,0,0,0,0,1],
-      [1,0,1,0,1,0,1,1,0,1],
-      [1,0,1,0,0,0,0,1,0,1],
+      [1,0,0,0,1,4,4,4,4,1],  // cols 5-8: Antechamber (TILE_ROOM)
+      [1,0,1,0,1,4,1,1,4,1],  // cols 5,8: Antechamber (walls at 6,7)
+      [1,0,1,0,0,4,4,1,4,1],  // cols 5,6,8: Antechamber (wall at 7)
       [1,0,1,1,1,1,0,1,0,1],
       [1,0,0,0,0,1,0,0,0,1],
       [1,1,1,0,1,1,1,1,0,1],
@@ -452,7 +460,8 @@ const LEVELS = [
 
   /* ── LEVEL 1: The Catacombs ──
      Pillared hall. STAIR_UP col 7 connects to level 0.
-     STAIR_DOWN col 2 leads to the Deep Vaults.            */
+     STAIR_DOWN col 2 leads to the Deep Vaults.
+     Room: the landing chamber between the two staircases (row 8, cols 3-6). */
   {
     name: "THE CATACOMBS",
     map: [
@@ -464,7 +473,7 @@ const LEVELS = [
       [1,0,0,0,0,0,0,0,0,1],
       [1,0,1,0,1,0,1,0,1,1],
       [1,0,0,0,0,0,0,0,0,1],
-      [1,0,2,0,0,0,0,3,0,1],  // STAIR_DOWN col 2, STAIR_UP col 7
+      [1,0,2,4,4,4,4,3,0,1],  // STAIR_DOWN col 2, STAIR_UP col 7; room cols 3-6
       [1,1,1,1,1,1,1,1,1,1],
     ],
     entryFromAbove: { x:7, y:8, dir:0 },
@@ -473,12 +482,13 @@ const LEVELS = [
 
   /* ── LEVEL 2: The Deep Vaults ──
      Tight winding passages. STAIR_UP col 2 connects to level 1.
-     No STAIR_DOWN — this is the bottom of the dungeon.    */
+     No STAIR_DOWN — this is the bottom of the dungeon.
+     Room: the vault chamber (row 1, cols 4-8).              */
   {
     name: "THE DEEP VAULTS",
     map: [
       [1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,1,0,0,0,0,0,1],
+      [1,0,0,1,4,4,4,4,4,1],  // cols 4-8: Vault Chamber (TILE_ROOM)
       [1,0,1,0,0,1,1,0,0,1],
       [1,0,0,0,1,0,0,0,1,1],
       [1,1,1,0,0,1,0,0,0,1],
@@ -534,18 +544,40 @@ function resizeCanvas() {
    "Fake 3-D" like early Wizardry / Bard's Tale.
    VIEW_DEPTH tiles ahead are drawn back-to-front.
    PERSP_SCALE shrinks each successive depth rectangle.
+   WALL_HEIGHT_RATIO stretches the Y axis so corridors read as
+   taller than wide (rectangular, not square).
 */
-const VIEW_DEPTH  = 5;
-const PERSP_SCALE = 0.55;
-let   depthRects  = [];
+const VIEW_DEPTH        = 5;
+const PERSP_SCALE       = 0.55;
+const WALL_HEIGHT_RATIO = 1.5;   // walls 1.5× taller than wide
+let   depthRects        = [];
 
 function buildDepthRects() {
   depthRects = [];
-  const S = canvas.width, cx = S/2, cy = S/2, maxHalf = S/2;
+  const S = canvas.width, cx = S / 2, cy = S / 2;
+  const halfX = S / 2;
+  const halfY = halfX * WALL_HEIGHT_RATIO;
   for (let d = 0; d <= VIEW_DEPTH; d++) {
     const s = Math.pow(PERSP_SCALE, d);
-    depthRects.push({ x1:cx-maxHalf*s, y1:cy-maxHalf*s, x2:cx+maxHalf*s, y2:cy+maxHalf*s });
+    depthRects.push({
+      x1: cx - halfX * s, y1: cy - halfY * s,
+      x2: cx + halfX * s, y2: cy + halfY * s,
+    });
   }
+}
+
+/* ── Shading helpers — green-only palette ─────────────────
+   wallFillGreen(isNS, d): fill brightness for NS vs EW walls at depth d.
+     NS walls (face N or S) are darker; EW walls are brighter.
+     Both dim exponentially with distance.
+   wallStrokeGreen(d): stroke brightness for wireframe lines at depth d.
+*/
+function wallFillGreen(isNS, depth) {
+  const base = isNS ? 0x18 : 0x28;                  // NS darker, EW lighter
+  return Math.max(2, Math.round(base * Math.pow(0.65, depth)));
+}
+function wallStrokeGreen(depth) {
+  return Math.max(0x18, Math.round(0xff * Math.pow(0.62, depth)));
 }
 
 function getTile(col, row) {
@@ -565,10 +597,13 @@ function fillQuad(p0, p1, p2, p3) {
 
 function drawStairGlyph(rect, stairType) {
   const {x1,y1,x2,y2} = rect, w=x2-x1, h=y2-y1;
-  ctx.fillStyle="#000d00"; ctx.strokeStyle="#00ff00";
+  /* Stairs-down: amber (#ffb000).  Stairs-up: blue (#7fd1ff). */
+  const color = stairType === TILE_STAIR_DOWN ? "#ffb000" : "#7fd1ff";
+  const bgCol = stairType === TILE_STAIR_DOWN ? "#0d0800" : "#00080d";
+  ctx.fillStyle = bgCol; ctx.strokeStyle = color;
   ctx.beginPath(); ctx.rect(x1,y1,w,h); ctx.fill(); ctx.stroke();
   const N=5;
-  ctx.beginPath(); ctx.strokeStyle="#00ff00";
+  ctx.beginPath(); ctx.strokeStyle = color;
   for (let i=0;i<N;i++) {
     const frac=i/(N-1), inset=w*(0.04+0.38*frac);
     const lineY = stairType===TILE_STAIR_DOWN
@@ -578,7 +613,7 @@ function drawStairGlyph(rect, stairType) {
   }
   ctx.stroke();
   const arrowSize=Math.max(8,h*0.18);
-  ctx.font=`${arrowSize}px "Courier New"`; ctx.fillStyle="#00ff00";
+  ctx.font=`${arrowSize}px "Courier New"`; ctx.fillStyle=color;
   ctx.textAlign="center"; ctx.textBaseline="middle";
   ctx.fillText(
     stairType===TILE_STAIR_DOWN?"▼":"▲",
@@ -589,43 +624,73 @@ function drawStairGlyph(rect, stairType) {
 
 function render() {
   buildDepthRects();
-  const S=canvas.width;
-  ctx.fillStyle="#000000"; ctx.fillRect(0,0,S,S);
-  ctx.strokeStyle="#00ff00"; ctx.fillStyle="#000000"; ctx.lineWidth=1.5;
+  const S = canvas.width;
+  ctx.fillStyle = "#000000"; ctx.fillRect(0, 0, S, S);
+  ctx.lineWidth = 1.5;
 
-  const fd=DIRECTIONS[player.dir];
-  const rd=DIRECTIONS[(player.dir+1)%4];
+  const fd = DIRECTIONS[player.dir];
+  const rd = DIRECTIONS[(player.dir + 1) % 4];
+  /* When facing N or S the front wall is N/S-oriented (darker).
+     When facing E or W the front wall is E/W-oriented (lighter).
+     Side walls are always the opposite type from the front wall. */
+  const facingNS = fd.dy !== 0;
 
-  for (let d=VIEW_DEPTH-1; d>=0; d--) {
-    const tx=player.x+fd.dx*d, ty=player.y+fd.dy*d;
-    const far=depthRects[d+1], near=depthRects[d];
-    const fx=tx+fd.dx, fy=ty+fd.dy;
-    if (isWall(fx,fy)) {
-      ctx.fillStyle="#001a00"; ctx.strokeStyle="#00ff00";
-      ctx.beginPath(); ctx.rect(far.x1,far.y1,far.x2-far.x1,far.y2-far.y1); ctx.fill(); ctx.stroke();
+  for (let d = VIEW_DEPTH - 1; d >= 0; d--) {
+    const tx = player.x + fd.dx * d, ty = player.y + fd.dy * d;
+    const far = depthRects[d + 1], near = depthRects[d];
+
+    const gNS    = wallFillGreen(true,  d);
+    const gEW    = wallFillGreen(false, d);
+    const gStrk  = wallStrokeGreen(d);
+    const stroke = `rgb(0,${gStrk},0)`;
+
+    /* ── Front face ── */
+    const fx = tx + fd.dx, fy = ty + fd.dy;
+    if (isWall(fx, fy)) {
+      const g = facingNS ? gNS : gEW;
+      ctx.fillStyle = `rgb(0,${g},0)`; ctx.strokeStyle = stroke;
+      ctx.beginPath(); ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
+      ctx.fill(); ctx.stroke();
     } else {
-      const ft=getTile(fx,fy);
-      if (ft===TILE_STAIR_DOWN||ft===TILE_STAIR_UP) drawStairGlyph(far,ft);
+      const ft = getTile(fx, fy);
+      if (ft === TILE_STAIR_DOWN || ft === TILE_STAIR_UP) drawStairGlyph(far, ft);
     }
-    const lx=tx-rd.dx, ly=ty-rd.dy;
-    if (isWall(lx,ly)) {
-      ctx.fillStyle="#001400"; ctx.strokeStyle="#00ff00";
-      fillQuad({x:near.x1,y:near.y1},{x:far.x1,y:far.y1},{x:far.x1,y:far.y2},{x:near.x1,y:near.y2});
+
+    /* ── Left side wall ── */
+    if (isWall(tx - rd.dx, ty - rd.dy)) {
+      const g = facingNS ? gEW : gNS;
+      ctx.fillStyle = `rgb(0,${g},0)`; ctx.strokeStyle = stroke;
+      fillQuad(
+        {x: near.x1, y: near.y1}, {x: far.x1, y: far.y1},
+        {x: far.x1,  y: far.y2},  {x: near.x1, y: near.y2}
+      );
     }
-    if (isWall(tx+rd.dx,ty+rd.dy)) {
-      ctx.fillStyle="#001400"; ctx.strokeStyle="#00ff00";
-      fillQuad({x:near.x2,y:near.y1},{x:far.x2,y:far.y1},{x:far.x2,y:far.y2},{x:near.x2,y:near.y2});
+
+    /* ── Right side wall ── */
+    if (isWall(tx + rd.dx, ty + rd.dy)) {
+      const g = facingNS ? gEW : gNS;
+      ctx.fillStyle = `rgb(0,${g},0)`; ctx.strokeStyle = stroke;
+      fillQuad(
+        {x: near.x2, y: near.y1}, {x: far.x2, y: far.y1},
+        {x: far.x2,  y: far.y2},  {x: near.x2, y: near.y2}
+      );
     }
-    ctx.strokeStyle="#00ff00"; ctx.beginPath();
-    ctx.moveTo(near.x1,near.y1); ctx.lineTo(far.x1,far.y1);
-    ctx.moveTo(near.x2,near.y1); ctx.lineTo(far.x2,far.y1);
-    ctx.moveTo(near.x1,near.y2); ctx.lineTo(far.x1,far.y2);
-    ctx.moveTo(near.x2,near.y2); ctx.lineTo(far.x2,far.y2);
+
+    /* ── Corridor perspective lines ── */
+    ctx.strokeStyle = stroke; ctx.beginPath();
+    ctx.moveTo(near.x1, near.y1); ctx.lineTo(far.x1, far.y1);
+    ctx.moveTo(near.x2, near.y1); ctx.lineTo(far.x2, far.y1);
+    ctx.moveTo(near.x1, near.y2); ctx.lineTo(far.x1, far.y2);
+    ctx.moveTo(near.x2, near.y2); ctx.lineTo(far.x2, far.y2);
     ctx.stroke();
-    ctx.beginPath(); ctx.rect(far.x1,far.y1,far.x2-far.x1,far.y2-far.y1); ctx.stroke();
+    ctx.beginPath(); ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
+    ctx.stroke();
   }
-  const n0=depthRects[0];
-  ctx.beginPath(); ctx.rect(n0.x1,n0.y1,n0.x2-n0.x1,n0.y2-n0.y1); ctx.stroke();
+
+  /* Innermost near frame (player's immediate tile boundary) */
+  const n0 = depthRects[0];
+  ctx.strokeStyle = `rgb(0,${wallStrokeGreen(0)},0)`;
+  ctx.beginPath(); ctx.rect(n0.x1, n0.y1, n0.x2 - n0.x1, n0.y2 - n0.y1); ctx.stroke();
 
   updateStatus();
   updateStairButton();
@@ -638,52 +703,104 @@ function updateStatus() {
 }
 
 function updateStairButton() {
-  const tile=getTile(player.x,player.y);
-  const wrap=document.getElementById("stair-wrap");
-  const btn =document.getElementById("btn-stairs");
-  const on  =(tile===TILE_STAIR_DOWN||tile===TILE_STAIR_UP);
-  wrap.style.display=on?"block":"none";
-  if (tile===TILE_STAIR_DOWN) btn.textContent="DESCEND ▼";
-  else if (tile===TILE_STAIR_UP) btn.textContent="ASCEND ▲";
+  const tile    = getTile(player.x, player.y);
+  const fd      = DIRECTIONS[player.dir];
+  const fwdTile = getTile(player.x + fd.dx, player.y + fd.dy);
+  const wrap    = document.getElementById("stair-wrap");
+  const btn     = document.getElementById("btn-stairs");
+
+  const onDown  = tile    === TILE_STAIR_DOWN;
+  const onUp    = tile    === TILE_STAIR_UP;
+  const seeDown = fwdTile === TILE_STAIR_DOWN;
+  const seeUp   = fwdTile === TILE_STAIR_UP;
+
+  if (onDown || onUp) {
+    wrap.style.display = "block";
+    btn.disabled       = false;
+    btn.textContent    = onDown ? "▼ [PRESS E TO DESCEND]" : "▲ [PRESS E TO ASCEND]";
+  } else if (seeDown || seeUp) {
+    wrap.style.display = "block";
+    btn.disabled       = true;
+    btn.textContent    = seeDown ? "STAIRCASE DESCENDS AHEAD ▼" : "STAIRCASE ASCENDS AHEAD ▲";
+  } else {
+    wrap.style.display = "none";
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   RANDOM ENCOUNTER SYSTEM
+   ════════════════════════════════════════════════════════════
+   Encounters fire on movement.  Safe conditions:
+     • Staircase tiles (TILE_STAIR_DOWN / TILE_STAIR_UP)
+     • The first step after entering/changing levels (dungeonEntryStep)
+   Rates:
+     • TILE_FLOOR (corridor) — every step rolls ENCOUNTER_RATE_HALLWAY
+     • TILE_ROOM first entry (prev tile was non-room) — rolls ENCOUNTER_RATE_ROOM
+     • TILE_ROOM within room (prev also TILE_ROOM) — no roll
+*/
+let dungeonEntryStep = true;   // cleared on first step; reset by enterDungeon/changeLevel
+
+function checkEncounter(newTile, prevTile) {
+  if (dungeonEntryStep) return;
+  if (newTile === TILE_STAIR_DOWN || newTile === TILE_STAIR_UP) return;
+
+  if (newTile === TILE_ROOM && prevTile !== TILE_ROOM) {
+    /* Entering a room from a corridor */
+    if (Math.random() < ENCOUNTER_RATE_ROOM) {
+      console.log("Encounter triggered — dungeon level " + (player.level + 1));
+    }
+  } else if (newTile === TILE_FLOOR) {
+    /* Corridor step */
+    if (Math.random() < ENCOUNTER_RATE_HALLWAY) {
+      console.log("Encounter triggered — dungeon level " + (player.level + 1));
+    }
+  }
 }
 
 /* ════════════════════════════════════════════════════════════
    LEVEL TRANSITIONS
    ════════════════════════════════════════════════════════════ */
 function changeLevel(direction) {
-  const tile=getTile(player.x,player.y);
-  const targetIdx=player.level+direction;
-  if (direction=== 1&&tile!==TILE_STAIR_DOWN) return;
-  if (direction===-1&&tile!==TILE_STAIR_UP)   return;
-  if (targetIdx<0||targetIdx>=LEVELS.length)  return;
-  const entry=(direction===1)?LEVELS[targetIdx].entryFromAbove:LEVELS[targetIdx].entryFromBelow;
+  const tile = getTile(player.x, player.y);
+  const targetIdx = player.level + direction;
+  if (direction ===  1 && tile !== TILE_STAIR_DOWN) return;
+  if (direction === -1 && tile !== TILE_STAIR_UP)   return;
+  if (targetIdx < 0 || targetIdx >= LEVELS.length)  return;
+  const entry = (direction === 1)
+    ? LEVELS[targetIdx].entryFromAbove
+    : LEVELS[targetIdx].entryFromBelow;
   if (!entry) return;
-  player.level=targetIdx; player.x=entry.x; player.y=entry.y; player.dir=entry.dir;
+  player.level = targetIdx; player.x = entry.x; player.y = entry.y; player.dir = entry.dir;
+  dungeonEntryStep = true;   // landing tile at new level is always safe
   syncDungeonToGS();
   render();
 }
 
 function useStairs() {
-  const tile=getTile(player.x,player.y);
-  if (tile===TILE_STAIR_DOWN) changeLevel(1);
-  if (tile===TILE_STAIR_UP)   changeLevel(-1);
+  const tile = getTile(player.x, player.y);
+  if (tile === TILE_STAIR_DOWN) changeLevel(1);
+  if (tile === TILE_STAIR_UP)   changeLevel(-1);
 }
 
 /* ════════════════════════════════════════════════════════════
    MOVEMENT
    ════════════════════════════════════════════════════════════ */
 function moveForward(step) {
-  const fd=DIRECTIONS[player.dir];
-  const nx=player.x+fd.dx*step, ny=player.y+fd.dy*step;
-  if (!isWall(nx,ny)) {
-    player.x=nx; player.y=ny;
+  const fd = DIRECTIONS[player.dir];
+  const nx = player.x + fd.dx * step, ny = player.y + fd.dy * step;
+  if (!isWall(nx, ny)) {
+    const prevTile = getTile(player.x, player.y);
+    player.x = nx; player.y = ny;
+    const newTile = getTile(player.x, player.y);
+    checkEncounter(newTile, prevTile);
+    dungeonEntryStep = false;
     syncDungeonToGS();
     render();
   }
 }
 
 function rotate(delta) {
-  player.dir=(player.dir+4+delta)%4;
+  player.dir = (player.dir + 4 + delta) % 4;
   syncDungeonToGS();
   render();
 }
@@ -705,6 +822,7 @@ function syncDungeonToGS() {
 function enterDungeon() {
   player.level=GS.dungeon.level; player.x=GS.dungeon.x;
   player.y=GS.dungeon.y;         player.dir=GS.dungeon.dir;
+  dungeonEntryStep = true;
   showScreen("dungeon");
   resizeCanvas();
 }
@@ -733,6 +851,7 @@ document.addEventListener("keydown",(e)=>{
     case "ArrowDown":  moveForward(-1); e.preventDefault(); break;
     case "ArrowLeft":  rotate(-1);      e.preventDefault(); break;
     case "ArrowRight": rotate(1);       e.preventDefault(); break;
+    case "e": case "E": useStairs();    e.preventDefault(); break;
     case ">": case ".": useStairs();    e.preventDefault(); break;
     case "<": case ",": useStairs();    e.preventDefault(); break;
   }
