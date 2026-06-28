@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dungeon Descent — Map Editor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green: #00ff00; --green-dim: #1f9e1f; --line: #0a3d0a;
+      --amber: #ffb000; --blue: #7fd1ff; --red: #ff4d4d;
+    }
+    body {
+      background: #000; color: var(--green);
+      font-family: "Courier New", Courier, monospace;
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 5px 14px; border-bottom: 2px solid var(--green);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 0.9rem; letter-spacing: 0.3em; }
+    #hdr-status { color: var(--green-dim); font-size: 0.75rem; }
+
+    /* ── Main layout ── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Panels ── */
+    .panel { padding: 8px; overflow-y: auto; flex-shrink: 0; font-size: 0.78rem; }
+    .panel-left  { width: 170px; border-right: 1px solid var(--line); }
+    .panel-right { width: 185px; border-left:  1px solid var(--line); }
+    .panel-center {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      overflow: auto; padding: 10px; background: #050505;
+    }
+    canvas { cursor: crosshair; display: block; image-rendering: pixelated; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--line); padding: 5px 12px;
+      display: flex; gap: 6px; align-items: center; flex-shrink: 0;
+    }
+    #foot-status { color: var(--green-dim); font-size: 0.75rem; }
+    #cursor-info  { color: var(--line); font-size: 0.72rem; margin-left: auto; }
+
+    /* ── Section headers ── */
+    .sec {
+      color: var(--green-dim); font-size: 0.65rem; letter-spacing: 0.2em;
+      border-bottom: 1px solid var(--line); padding-bottom: 3px;
+      margin: 10px 0 5px;
+    }
+    .sec:first-child { margin-top: 0; }
+
+    /* ── Buttons ── */
+    .btn {
+      font-family: inherit; font-size: 0.75rem; background: #000;
+      color: var(--green); border: 1px solid var(--green);
+      padding: 4px 8px; cursor: pointer; letter-spacing: 0.04em;
+      display: block; width: 100%; text-align: left; margin-bottom: 3px;
+    }
+    .btn:hover:not(:disabled) { background: #003300; }
+    .btn.active { background: var(--green); color: #000; }
+    .btn.danger { border-color: var(--red);   color: var(--red);   }
+    .btn.danger:hover:not(:disabled) { background: #330000; }
+    .btn.amber  { border-color: var(--amber); color: var(--amber); }
+    .btn.amber:hover:not(:disabled)  { background: #332200; }
+    .btn.blue   { border-color: var(--blue);  color: var(--blue);  }
+    .btn.blue:hover:not(:disabled)   { background: #001a33; }
+    .btn.sm { padding: 3px 6px; font-size: 0.68rem; }
+    .btn.inline { display: inline-block; width: auto; }
+    .btn:disabled { color: var(--line); border-color: var(--line); cursor: not-allowed; }
+
+    /* ── Level list ── */
+    .lv-item {
+      padding: 4px 6px; border: 1px solid var(--line); margin-bottom: 3px;
+      cursor: pointer; font-size: 0.75rem; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .lv-item:hover   { border-color: var(--green-dim); }
+    .lv-item.active  { border-color: var(--green); }
+
+    /* ── Tile palette ── */
+    .tile-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 6px; border: 1px solid var(--line); margin-bottom: 3px;
+      cursor: pointer; font-size: 0.75rem; background: #000;
+      color: var(--green); font-family: inherit; width: 100%; text-align: left;
+    }
+    .tile-btn:hover  { border-color: var(--green-dim); }
+    .tile-btn.active { border-color: var(--green); box-shadow: 0 0 4px var(--green); }
+    .swatch { width: 14px; height: 14px; border: 1px solid #444; flex-shrink: 0; }
+
+    /* ── Compass direction picker ── */
+    .dir-grid {
+      display: grid; grid-template-columns: repeat(3, 34px);
+      gap: 2px; margin-bottom: 6px;
+    }
+    .dir-btn {
+      font-family: inherit; font-size: 0.85rem; background: #000;
+      color: var(--green); border: 1px solid var(--line);
+      padding: 5px 0; cursor: pointer; text-align: center;
+    }
+    .dir-btn:hover  { background: #003300; border-color: var(--green); }
+    .dir-btn.active { background: var(--green); color: #000; }
+    .dir-empty { width: 34px; height: 34px; }
+
+    /* ── Entry info ── */
+    .entry-info { font-size: 0.68rem; margin-bottom: 4px; color: var(--green-dim); }
+    .entry-info .val { color: var(--green); }
+
+    /* ── Name input ── */
+    input.name-in {
+      font-family: inherit; font-size: 0.75rem; background: #000;
+      color: var(--green); border: 1px solid var(--green);
+      padding: 4px 6px; width: 100%; margin-bottom: 4px;
+    }
+    input.name-in:focus { outline: none; box-shadow: 0 0 4px var(--green); }
+
+    /* ── Keyboard hints ── */
+    .hint { color: var(--line); font-size: 0.65rem; margin-top: 6px; line-height: 1.6; }
+    .hint span { color: var(--green-dim); }
+
+    /* ── Modal ── */
+    #modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.9); align-items: center;
+      justify-content: center; z-index: 100;
+    }
+    #modal.open { display: flex; }
+    .modal-box {
+      background: #000; border: 2px solid var(--green);
+      padding: 14px; width: 600px; max-width: 94vw;
+      box-shadow: 0 0 24px var(--green);
+    }
+    .modal-hdr {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px; font-size: 0.82rem; letter-spacing: 0.15em;
+      color: var(--green-dim);
+    }
+    textarea.io {
+      font-family: inherit; font-size: 0.68rem; background: #000;
+      color: var(--green); border: 1px solid var(--green);
+      width: 100%; height: 260px; resize: vertical; padding: 6px;
+    }
+    textarea.io:focus { outline: none; }
+    #modal-status { font-size: 0.75rem; color: var(--green-dim); margin-top: 5px; min-height: 18px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>DUNGEON DESCENT — MAP EDITOR</h1>
+  <div id="hdr-status">No unsaved changes</div>
+</header>
+
+<div class="main">
+
+  <!-- ══ Left panel: Level list ══ -->
+  <div class="panel panel-left">
+    <div class="sec">LEVELS</div>
+    <div id="level-list"></div>
+
+    <button class="btn" onclick="addLevel()">+ ADD LEVEL</button>
+    <button class="btn danger" onclick="removeLevel()">− REMOVE LEVEL</button>
+    <button class="btn sm" onclick="moveLevel(-1)" style="margin-top:4px">▲ MOVE UP</button>
+    <button class="btn sm" onclick="moveLevel(1)">▼ MOVE DOWN</button>
+
+    <div class="sec">LEVEL NAME</div>
+    <input class="name-in" id="level-name" type="text" placeholder="Level name..." oninput="onNameInput()">
+
+    <div class="sec">CLEAR / FILL</div>
+    <button class="btn sm danger" onclick="clearLevel()">FILL ALL → WALL</button>
+    <button class="btn sm" onclick="fillAll(TILE_FLOOR)">FILL ALL → FLOOR</button>
+    <button class="btn sm" onclick="fillAll(TILE_ROOM)">FILL ALL → ROOM</button>
+  </div>
+
+  <!-- ══ Center: Canvas ══ -->
+  <div class="panel-center">
+    <canvas id="map-canvas"></canvas>
+  </div>
+
+  <!-- ══ Right panel: Tools ══ -->
+  <div class="panel panel-right">
+
+    <div class="sec">TOOL</div>
+    <button class="btn" id="tool-paint"       onclick="setTool('paint')">✎  PAINT</button>
+    <button class="btn" id="tool-fill"        onclick="setTool('fill')">◈  FILL BUCKET</button>
+    <button class="btn amber" id="tool-entry-above" onclick="setTool('entry-above')">▼  SET ENTRY ↓</button>
+    <button class="btn blue"  id="tool-entry-below" onclick="setTool('entry-below')">▲  SET ENTRY ↑</button>
+
+    <div class="sec">TILE</div>
+    <div id="tile-palette"></div>
+
+    <div class="sec">ENTRY DIRECTION</div>
+    <div class="dir-grid">
+      <div class="dir-empty"></div>
+      <button class="dir-btn" id="d0" onclick="setDir(0)">N</button>
+      <div class="dir-empty"></div>
+      <button class="dir-btn" id="d3" onclick="setDir(3)">W</button>
+      <div class="dir-empty"></div>
+      <button class="dir-btn" id="d1" onclick="setDir(1)">E</button>
+      <div class="dir-empty"></div>
+      <button class="dir-btn" id="d2" onclick="setDir(2)">S</button>
+      <div class="dir-empty"></div>
+    </div>
+
+    <div class="sec">ENTRY POINTS</div>
+    <div class="entry-info">↓ from above: <span class="val" id="info-above">—</span></div>
+    <div class="entry-info">↑ from below: <span class="val" id="info-below">—</span></div>
+    <button class="btn sm danger" onclick="clearEntry('above')">CLEAR ENTRY ↓</button>
+    <button class="btn sm danger" onclick="clearEntry('below')">CLEAR ENTRY ↑</button>
+
+    <div class="hint">
+      <span>Left-drag</span> paint &nbsp;
+      <span>Right-click</span> erase<br>
+      <span>Shift+click</span> fill bucket<br>
+      <span>Esc</span> cancel entry tool
+    </div>
+
+  </div>
+
+</div><!-- /main -->
+
+<footer>
+  <button class="btn inline" onclick="saveSession()">💾 SAVE</button>
+  <button class="btn inline amber" onclick="doExport()">EXPORT JS ▶</button>
+  <button class="btn inline" onclick="doImport()">◀ IMPORT JS</button>
+  <div id="foot-status"></div>
+  <div id="cursor-info"></div>
+</footer>
+
+<!-- ══ IO Modal ══ -->
+<div id="modal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span id="modal-title">EXPORT</span>
+      <button class="btn inline sm" onclick="closeModal()">CLOSE ✕</button>
+    </div>
+    <textarea class="io" id="io-text" spellcheck="false"></textarea>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button class="btn inline amber" id="btn-copy" onclick="doCopy()">COPY TO CLIPBOARD</button>
+      <button class="btn inline"       id="btn-load" onclick="doLoad()">LOAD INTO EDITOR</button>
+    </div>
+    <div id="modal-status"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════
+   TILE CONSTANTS  (must match index.html)
+   ════════════════════════════════════════════════════ */
+const TILE_FLOOR      = 0;
+const TILE_WALL       = 1;
+const TILE_STAIR_DOWN = 2;
+const TILE_STAIR_UP   = 3;
+const TILE_ROOM       = 4;
+
+const TILE_DEFS = [
+  { id:TILE_WALL,       label:"WALL",       fill:"#0c0c0c", stroke:"#1e1e1e" },
+  { id:TILE_FLOOR,      label:"FLOOR",      fill:"#0d2b0d", stroke:"#1a5c1a" },
+  { id:TILE_ROOM,       label:"ROOM",       fill:"#0a4a0a", stroke:"#00cc00" },
+  { id:TILE_STAIR_DOWN, label:"STAIR DOWN", fill:"#2e1800", stroke:"#ffb000" },
+  { id:TILE_STAIR_UP,   label:"STAIR UP",   fill:"#001428", stroke:"#7fd1ff" },
+];
+
+const DIR_NAMES  = ["NORTH","EAST","SOUTH","WEST"];
+const DIR_ARROWS = ["↑","→","↓","←"];
+
+/* ════════════════════════════════════════════════════
+   GRID CONFIG
+   ════════════════════════════════════════════════════ */
+const GRID_W = 20;
+const GRID_H = 20;
+const CELL   = 27;   /* px per cell  →  540 × 540 canvas */
+
+/* ════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════ */
+let levels   = [];
+let curLevel = 0;
+let tool     = "paint";
+let selTile  = TILE_WALL;
+let entryDir = 0;
+let painting = false;
+let dirty    = false;
+
+/* ════════════════════════════════════════════════════
+   CANVAS
+   ════════════════════════════════════════════════════ */
+const canvas = document.getElementById("map-canvas");
+const ctx    = canvas.getContext("2d");
+canvas.width  = GRID_W * CELL;
+canvas.height = GRID_H * CELL;
+
+/* ════════════════════════════════════════════════════
+   LEVEL HELPERS
+   ════════════════════════════════════════════════════ */
+function blankMap() {
+  return Array.from({length:GRID_H}, () => Array(GRID_W).fill(TILE_WALL));
+}
+
+function newLevel(name) {
+  return {
+    name: name || "NEW LEVEL",
+    map:  blankMap(),
+    entryFromAbove: null,
+    entryFromBelow: null,
+  };
+}
+
+/* Shorthand for the currently active level object */
+function lv() { return levels[curLevel]; }
+
+/* ════════════════════════════════════════════════════
+   INIT
+   ════════════════════════════════════════════════════ */
+function init() {
+  const raw = localStorage.getItem("dd_map_editor");
+  if (raw) {
+    try {
+      const d = JSON.parse(raw);
+      levels   = d.levels;
+      curLevel = Math.min(d.curLevel || 0, levels.length - 1);
+      setHdr("Loaded from storage");
+    } catch {
+      levels = [newLevel("LEVEL 1 — ENTRY HALL")];
+    }
+  } else {
+    levels = [newLevel("LEVEL 1 — ENTRY HALL")];
+  }
+  renderAll();
+}
+
+function renderAll() {
+  renderLevelList();
+  renderCanvas();
+  renderPalette();
+  renderToolBtns();
+  renderEntryInfo();
+  renderDirBtns();
+  document.getElementById("level-name").value = lv().name;
+}
+
+/* ════════════════════════════════════════════════════
+   LEVEL MANAGEMENT
+   ════════════════════════════════════════════════════ */
+function addLevel() {
+  levels.push(newLevel("LEVEL " + (levels.length + 1)));
+  curLevel = levels.length - 1;
+  markDirty(); renderAll();
+}
+
+function removeLevel() {
+  if (levels.length <= 1) { setFoot("Need at least one level.", true); return; }
+  if (!confirm('Remove "' + lv().name + '"?')) return;
+  levels.splice(curLevel, 1);
+  curLevel = Math.min(curLevel, levels.length - 1);
+  markDirty(); renderAll();
+}
+
+function moveLevel(delta) {
+  const to = curLevel + delta;
+  if (to < 0 || to >= levels.length) return;
+  [levels[curLevel], levels[to]] = [levels[to], levels[curLevel]];
+  curLevel = to;
+  markDirty(); renderAll();
+}
+
+function selectLevel(idx) {
+  curLevel = idx;
+  tool     = "paint";
+  renderAll();
+}
+
+function onNameInput() {
+  lv().name = document.getElementById("level-name").value;
+  renderLevelList();
+  markDirty();
+}
+
+function clearLevel() {
+  if (!confirm('Reset "' + lv().name + '" to all walls?')) return;
+  lv().map = blankMap();
+  markDirty(); renderCanvas();
+}
+
+function fillAll(tileId) {
+  lv().map = Array.from({length:GRID_H}, () => Array(GRID_W).fill(tileId));
+  markDirty(); renderCanvas();
+}
+
+/* ════════════════════════════════════════════════════
+   TOOL & TILE SELECTION
+   ════════════════════════════════════════════════════ */
+function setTool(t) {
+  tool = t;
+  renderToolBtns();
+  renderEntryInfo();
+}
+
+function selectTile(id) {
+  selTile = id;
+  if (tool !== "paint" && tool !== "fill") tool = "paint";
+  renderPalette();
+  renderToolBtns();
+}
+
+function setDir(d) {
+  entryDir = d;
+  renderDirBtns();
+}
+
+function clearEntry(which) {
+  if (which === "above") lv().entryFromAbove = null;
+  else                   lv().entryFromBelow = null;
+  markDirty(); renderEntryInfo(); renderCanvas();
+}
+
+/* ════════════════════════════════════════════════════
+   CANVAS INTERACTION
+   ════════════════════════════════════════════════════ */
+function posFromEvent(e) {
+  const r  = canvas.getBoundingClientRect();
+  const sx = canvas.width  / r.width;
+  const sy = canvas.height / r.height;
+  const x  = Math.floor((e.clientX - r.left) * sx / CELL);
+  const y  = Math.floor((e.clientY - r.top)  * sy / CELL);
+  if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return null;
+  return { x, y };
+}
+
+function floodFill(sx, sy, newTile) {
+  const map  = lv().map;
+  const orig = map[sy][sx];
+  if (orig === newTile) return;
+  const stack = [[sx, sy]];
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) continue;
+    if (map[y][x] !== orig) continue;
+    map[y][x] = newTile;
+    stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+  }
+}
+
+function applyTool(pos, shiftKey) {
+  if (!pos) return;
+  const { x, y } = pos;
+
+  if (tool === "entry-above" || tool === "entry-below") {
+    const key = tool === "entry-above" ? "entryFromAbove" : "entryFromBelow";
+    lv()[key] = { x, y, dir: entryDir };
+    tool = "paint";
+    markDirty(); renderAll();
+    return;
+  }
+
+  const activeTool = shiftKey ? "fill" : tool;
+  if (activeTool === "fill") {
+    floodFill(x, y, selTile);
+  } else {
+    lv().map[y][x] = selTile;
+  }
+  markDirty(); renderCanvas();
+}
+
+canvas.addEventListener("mousedown", e => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  painting = true;
+  applyTool(posFromEvent(e), e.shiftKey);
+});
+
+canvas.addEventListener("mousemove", e => {
+  const pos = posFromEvent(e);
+  if (pos) {
+    const tile = lv().map[pos.y][pos.x];
+    const tdef = TILE_DEFS.find(t => t.id === tile) || TILE_DEFS[0];
+    document.getElementById("cursor-info").textContent =
+      "X:" + pos.x + "  Y:" + pos.y + "  — " + tdef.label;
+  } else {
+    document.getElementById("cursor-info").textContent = "";
+  }
+
+  if (!painting) return;
+  /* Fill, flood-fill, and entry tools only fire on mousedown */
+  if (tool === "fill" || tool.startsWith("entry") || e.shiftKey) return;
+  const p = posFromEvent(e);
+  if (p) { lv().map[p.y][p.x] = selTile; markDirty(); renderCanvas(); }
+});
+
+canvas.addEventListener("mouseup",    () => { painting = false; });
+canvas.addEventListener("mouseleave", () => { painting = false; });
+
+/* Right-click = erase (place wall) */
+canvas.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  if (tool.startsWith("entry")) return;
+  const pos = posFromEvent(e);
+  if (!pos) return;
+  lv().map[pos.y][pos.x] = TILE_WALL;
+  markDirty(); renderCanvas();
+});
+
+/* Escape = cancel entry tool */
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && tool.startsWith("entry")) {
+    tool = "paint";
+    renderToolBtns();
+    renderEntryInfo();
+  }
+});
+
+/* Warn on close if unsaved */
+window.addEventListener("beforeunload", e => {
+  if (dirty) { e.preventDefault(); e.returnValue = ""; }
+});
+
+/* ════════════════════════════════════════════════════
+   RENDERING
+   ════════════════════════════════════════════════════ */
+function renderLevelList() {
+  document.getElementById("level-list").innerHTML =
+    levels.map((l, i) =>
+      '<div class="lv-item' + (i === curLevel ? " active" : "") +
+      '" onclick="selectLevel(' + i + ')">' +
+      (i + 1) + ". " + l.name + "</div>"
+    ).join("");
+}
+
+function renderPalette() {
+  document.getElementById("tile-palette").innerHTML =
+    TILE_DEFS.map(td =>
+      '<button class="tile-btn' + (selTile === td.id ? " active" : "") +
+      '" onclick="selectTile(' + td.id + ')">' +
+      '<span class="swatch" style="background:' + td.fill +
+      ';border-color:' + td.stroke + '"></span>' +
+      td.label + "</button>"
+    ).join("");
+}
+
+function renderToolBtns() {
+  const tools = ["paint","fill","entry-above","entry-below"];
+  tools.forEach(t => {
+    const el = document.getElementById("tool-" + t);
+    if (!el) return;
+    /* Keep the color class (amber/blue) and swap active */
+    const isActive = tool === t;
+    const baseClass = t === "entry-above" ? "btn amber" : t === "entry-below" ? "btn blue" : "btn";
+    el.className = baseClass + (isActive ? " active" : "");
+  });
+}
+
+function renderEntryInfo() {
+  const ea = lv().entryFromAbove;
+  const eb = lv().entryFromBelow;
+  document.getElementById("info-above").textContent =
+    ea ? "(" + ea.x + "," + ea.y + ") " + DIR_NAMES[ea.dir] : "—";
+  document.getElementById("info-below").textContent =
+    eb ? "(" + eb.x + "," + eb.y + ") " + DIR_NAMES[eb.dir] : "—";
+}
+
+function renderDirBtns() {
+  [0,1,2,3].forEach(d => {
+    const el = document.getElementById("d" + d);
+    if (el) el.className = "dir-btn" + (entryDir === d ? " active" : "");
+  });
+}
+
+function renderCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const map = lv().map;
+
+  /* Tiles */
+  for (let y = 0; y < GRID_H; y++) {
+    for (let x = 0; x < GRID_W; x++) {
+      const td  = TILE_DEFS.find(t => t.id === map[y][x]) || TILE_DEFS[0];
+      const px  = x * CELL, py = y * CELL;
+      ctx.fillStyle   = td.fill;
+      ctx.fillRect(px, py, CELL, CELL);
+      ctx.strokeStyle = td.stroke;
+      ctx.lineWidth   = 0.5;
+      ctx.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
+    }
+  }
+
+  /* Subtle grid lines */
+  ctx.strokeStyle = "rgba(0,255,0,0.07)";
+  ctx.lineWidth   = 1;
+  for (let x = 0; x <= GRID_W; x++) {
+    ctx.beginPath(); ctx.moveTo(x*CELL, 0); ctx.lineTo(x*CELL, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y <= GRID_H; y++) {
+    ctx.beginPath(); ctx.moveTo(0, y*CELL); ctx.lineTo(canvas.width, y*CELL); ctx.stroke();
+  }
+
+  /* Entry point markers */
+  drawMarker(lv().entryFromAbove, "▼", "#ffb000");
+  drawMarker(lv().entryFromBelow, "▲", "#7fd1ff");
+}
+
+function drawMarker(entry, glyph, color) {
+  if (!entry) return;
+  const px = entry.x * CELL, py = entry.y * CELL;
+  ctx.fillStyle    = color;
+  ctx.font         = "bold " + Math.floor(CELL * 0.52) + "px Courier New";
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(glyph, px + CELL / 2, py + CELL / 2);
+  /* Small direction arrow in the corner */
+  ctx.font = Math.floor(CELL * 0.28) + "px Courier New";
+  ctx.fillText(DIR_ARROWS[entry.dir], px + CELL * 0.82, py + CELL * 0.22);
+}
+
+/* ════════════════════════════════════════════════════
+   PERSISTENCE
+   ════════════════════════════════════════════════════ */
+function markDirty() {
+  dirty = true;
+  setHdr("Unsaved changes");
+}
+
+function saveSession() {
+  localStorage.setItem("dd_map_editor", JSON.stringify({ levels, curLevel }));
+  dirty = false;
+  setHdr("Saved ✓");
+  setFoot("Session saved to browser storage.", false);
+}
+
+/* ════════════════════════════════════════════════════
+   EXPORT / IMPORT
+   ════════════════════════════════════════════════════ */
+function buildExport() {
+  const out = ["const LEVELS = ["];
+  levels.forEach((l, i) => {
+    const last = i === levels.length - 1;
+    out.push("  {");
+    out.push("    name: " + JSON.stringify(l.name) + ",");
+    out.push("    map: [");
+    l.map.forEach(row => out.push("      [" + row.join(",") + "],"));
+    out.push("    ],");
+    const fe = e => e ? "{ x:" + e.x + ", y:" + e.y + ", dir:" + e.dir + " }" : "null";
+    out.push("    entryFromAbove: " + fe(l.entryFromAbove) + ",");
+    out.push("    entryFromBelow: " + fe(l.entryFromBelow) + ",");
+    out.push("  }" + (last ? "" : ","));
+  });
+  out.push("];");
+  return out.join("\n");
+}
+
+function doExport() {
+  document.getElementById("modal-title").textContent =
+    "EXPORT  —  paste into index.html replacing the LEVELS block";
+  document.getElementById("io-text").value      = buildExport();
+  document.getElementById("btn-copy").style.display = "";
+  document.getElementById("btn-load").style.display = "none";
+  document.getElementById("modal-status").textContent = "";
+  document.getElementById("modal").classList.add("open");
+}
+
+function doImport() {
+  document.getElementById("modal-title").textContent =
+    "IMPORT  —  paste a const LEVELS = [...] block";
+  document.getElementById("io-text").value      = "";
+  document.getElementById("btn-copy").style.display = "none";
+  document.getElementById("btn-load").style.display = "";
+  document.getElementById("modal-status").textContent = "";
+  document.getElementById("modal").classList.add("open");
+}
+
+function closeModal() {
+  document.getElementById("modal").classList.remove("open");
+}
+
+function doCopy() {
+  const ta = document.getElementById("io-text");
+  ta.select();
+  document.execCommand("copy");
+  document.getElementById("modal-status").textContent = "Copied to clipboard ✓";
+}
+
+function doLoad() {
+  const raw = document.getElementById("io-text").value.trim();
+  try {
+    /* Execute the pasted block and grab LEVELS */
+    const imported = new Function(raw + "\nreturn LEVELS;")();
+    if (!Array.isArray(imported) || !imported.length) throw new Error("Not a valid LEVELS array");
+
+    levels = imported.map((l, i) => ({
+      name: l.name || "LEVEL " + (i + 1),
+      map: Array.from({length:GRID_H}, (_, y) =>
+        Array.from({length:GRID_W}, (_, x) => {
+          const v = (l.map[y] || [])[x];
+          return Number.isInteger(v) ? v : TILE_WALL;
+        })
+      ),
+      entryFromAbove: l.entryFromAbove || null,
+      entryFromBelow: l.entryFromBelow || null,
+    }));
+    curLevel = 0;
+    closeModal();
+    renderAll();
+    markDirty();
+    setFoot("Imported " + levels.length + " level(s) ✓", false);
+  } catch(e) {
+    document.getElementById("modal-status").textContent = "Parse error: " + e.message;
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   UI HELPERS
+   ════════════════════════════════════════════════════ */
+function setHdr(msg)  { document.getElementById("hdr-status").textContent = msg; }
+function setFoot(msg, err) {
+  const el = document.getElementById("foot-status");
+  el.textContent = msg;
+  el.style.color = err ? "var(--red)" : "var(--green-dim)";
+}
+
+/* ════════════════════════════════════════════════════
+   BOOT
+   ════════════════════════════════════════════════════ */
+init();
+</script>
+</body>
+</html>
