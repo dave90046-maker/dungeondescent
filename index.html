@@ -566,16 +566,10 @@ function buildDepthRects() {
   }
 }
 
-/* ── Shading helpers — green-only palette ─────────────────
-   wallFillGreen(isNS, d): fill brightness for NS vs EW walls at depth d.
-     NS walls (face N or S) are darker; EW walls are brighter.
-     Both dim exponentially with distance.
-   wallStrokeGreen(d): stroke brightness for wireframe lines at depth d.
+/* ── Shading helper — green-only palette ──────────────────
+   wallStrokeGreen(d): line brightness at depth d.
+     Starts at full green (#00ff00) at d=0 and dims exponentially.
 */
-function wallFillGreen(isNS, depth) {
-  const base = isNS ? 0x18 : 0x28;                  // NS darker, EW lighter
-  return Math.max(2, Math.round(base * Math.pow(0.65, depth)));
-}
 function wallStrokeGreen(depth) {
   return Math.max(0x18, Math.round(0xff * Math.pow(0.62, depth)));
 }
@@ -588,12 +582,6 @@ function getTile(col, row) {
 
 function isWall(col, row) { return getTile(col, row) === TILE_WALL; }
 
-function fillQuad(p0, p1, p2, p3) {
-  ctx.beginPath();
-  ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y);
-  ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-}
 
 function drawStairGlyph(rect, stairType) {
   const {x1,y1,x2,y2} = rect, w=x2-x1, h=y2-y1;
@@ -625,72 +613,70 @@ function drawStairGlyph(rect, stairType) {
 function render() {
   buildDepthRects();
   const S = canvas.width;
-  ctx.fillStyle = "#000000"; ctx.fillRect(0, 0, S, S);
-  ctx.lineWidth = 1.5;
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, S, S);
 
   const fd = DIRECTIONS[player.dir];
   const rd = DIRECTIONS[(player.dir + 1) % 4];
-  /* When facing N or S the front wall is N/S-oriented (darker).
-     When facing E or W the front wall is E/W-oriented (lighter).
-     Side walls are always the opposite type from the front wall. */
-  const facingNS = fd.dy !== 0;
 
-  for (let d = VIEW_DEPTH - 1; d >= 0; d--) {
+  /* Outermost frame — the player's immediate tile boundary */
+  const n0 = depthRects[0];
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = `rgb(0,${wallStrokeGreen(0)},0)`;
+  ctx.beginPath(); ctx.rect(n0.x1, n0.y1, n0.x2 - n0.x1, n0.y2 - n0.y1); ctx.stroke();
+  ctx.lineWidth = 1.5;
+
+  /* Front-to-back loop: break as soon as a wall closes the view so lines
+     never bleed through solid stone (critical for wireframe — no fills
+     to occlude them). */
+  for (let d = 0; d < VIEW_DEPTH; d++) {
     const tx = player.x + fd.dx * d, ty = player.y + fd.dy * d;
-    const far = depthRects[d + 1], near = depthRects[d];
+    const near = depthRects[d], far = depthRects[d + 1];
 
-    const gNS    = wallFillGreen(true,  d);
-    const gEW    = wallFillGreen(false, d);
-    const gStrk  = wallStrokeGreen(d);
-    const stroke = `rgb(0,${gStrk},0)`;
+    ctx.strokeStyle = `rgb(0,${wallStrokeGreen(d)},0)`;
 
-    /* ── Front face ── */
-    const fx = tx + fd.dx, fy = ty + fd.dy;
-    if (isWall(fx, fy)) {
-      const g = facingNS ? gNS : gEW;
-      ctx.fillStyle = `rgb(0,${g},0)`; ctx.strokeStyle = stroke;
-      ctx.beginPath(); ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
-      ctx.fill(); ctx.stroke();
-    } else {
-      const ft = getTile(fx, fy);
-      if (ft === TILE_STAIR_DOWN || ft === TILE_STAIR_UP) drawStairGlyph(far, ft);
-    }
-
-    /* ── Left side wall ── */
+    /* ── Left side wall: one closing vertical line ── */
     if (isWall(tx - rd.dx, ty - rd.dy)) {
-      const g = facingNS ? gEW : gNS;
-      ctx.fillStyle = `rgb(0,${g},0)`; ctx.strokeStyle = stroke;
-      fillQuad(
-        {x: near.x1, y: near.y1}, {x: far.x1, y: far.y1},
-        {x: far.x1,  y: far.y2},  {x: near.x1, y: near.y2}
-      );
+      ctx.beginPath();
+      ctx.moveTo(near.x1, near.y1); ctx.lineTo(near.x1, near.y2);
+      ctx.stroke();
     }
 
-    /* ── Right side wall ── */
+    /* ── Right side wall: one closing vertical line ── */
     if (isWall(tx + rd.dx, ty + rd.dy)) {
-      const g = facingNS ? gEW : gNS;
-      ctx.fillStyle = `rgb(0,${g},0)`; ctx.strokeStyle = stroke;
-      fillQuad(
-        {x: near.x2, y: near.y1}, {x: far.x2, y: far.y1},
-        {x: far.x2,  y: far.y2},  {x: near.x2, y: near.y2}
-      );
+      ctx.beginPath();
+      ctx.moveTo(near.x2, near.y1); ctx.lineTo(near.x2, near.y2);
+      ctx.stroke();
     }
 
-    /* ── Corridor perspective lines ── */
-    ctx.strokeStyle = stroke; ctx.beginPath();
+    /* ── 4 perspective lines (always — they are the wall face edges too) ── */
+    ctx.beginPath();
     ctx.moveTo(near.x1, near.y1); ctx.lineTo(far.x1, far.y1);
     ctx.moveTo(near.x2, near.y1); ctx.lineTo(far.x2, far.y1);
     ctx.moveTo(near.x1, near.y2); ctx.lineTo(far.x1, far.y2);
     ctx.moveTo(near.x2, near.y2); ctx.lineTo(far.x2, far.y2);
     ctx.stroke();
-    ctx.beginPath(); ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1);
-    ctx.stroke();
-  }
 
-  /* Innermost near frame (player's immediate tile boundary) */
-  const n0 = depthRects[0];
-  ctx.strokeStyle = `rgb(0,${wallStrokeGreen(0)},0)`;
-  ctx.beginPath(); ctx.rect(n0.x1, n0.y1, n0.x2 - n0.x1, n0.y2 - n0.y1); ctx.stroke();
+    /* ── Far-depth boundary rectangle ── */
+    ctx.beginPath(); ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1); ctx.stroke();
+
+    /* ── Front face at (tx+fd, ty+fd) ── */
+    const ft = getTile(tx + fd.dx, ty + fd.dy);
+    if (ft === TILE_WALL) {
+      /* Horizontal hatch lines inside the far rect to read as solid stone */
+      const fh = far.y2 - far.y1;
+      const N  = Math.max(2, Math.round(fh / 14));
+      ctx.beginPath();
+      for (let i = 1; i <= N; i++) {
+        const lineY = far.y1 + fh * i / (N + 1);
+        ctx.moveTo(far.x1 + 1, lineY); ctx.lineTo(far.x2 - 1, lineY);
+      }
+      ctx.stroke();
+      break;   /* nothing behind a wall */
+    } else if (ft === TILE_STAIR_DOWN || ft === TILE_STAIR_UP) {
+      drawStairGlyph(far, ft);
+      break;   /* stairs fill the view */
+    }
+  }
 
   updateStatus();
   updateStairButton();
