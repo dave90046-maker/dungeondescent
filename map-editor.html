@@ -258,6 +258,7 @@ const TILE_WALL       = 1;
 const TILE_STAIR_DOWN = 2;
 const TILE_STAIR_UP   = 3;
 const TILE_ROOM       = 4;
+const TILE_DOOR       = 5;
 
 const TILE_DEFS = [
   { id:TILE_WALL,       label:"WALL",       fill:"#0c0c0c", stroke:"#1e1e1e" },
@@ -265,6 +266,7 @@ const TILE_DEFS = [
   { id:TILE_ROOM,       label:"ROOM",       fill:"#0a4a0a", stroke:"#00cc00" },
   { id:TILE_STAIR_DOWN, label:"STAIR DOWN", fill:"#2e1800", stroke:"#ffb000" },
   { id:TILE_STAIR_UP,   label:"STAIR UP",   fill:"#001428", stroke:"#7fd1ff" },
+  { id:TILE_DOOR,       label:"DOOR",       fill:"#0c0c0c", stroke:"#5c3300" },
 ];
 
 const DIR_NAMES  = ["NORTH","EAST","SOUTH","WEST"];
@@ -578,13 +580,36 @@ function renderCanvas() {
   /* Tiles */
   for (let y = 0; y < GRID_H; y++) {
     for (let x = 0; x < GRID_W; x++) {
-      const td  = TILE_DEFS.find(t => t.id === map[y][x]) || TILE_DEFS[0];
-      const px  = x * CELL, py = y * CELL;
+      const tile = map[y][x];
+      const td   = TILE_DEFS.find(t => t.id === tile) || TILE_DEFS[0];
+      const px   = x * CELL, py = y * CELL;
+
+      /* Base fill and cell border */
       ctx.fillStyle   = td.fill;
       ctx.fillRect(px, py, CELL, CELL);
       ctx.strokeStyle = td.stroke;
       ctx.lineWidth   = 0.5;
       ctx.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
+
+      /* Door glyph — a smaller rectangle inset inside a wall cell */
+      if (tile === TILE_DOOR) {
+        const dw = Math.round(CELL * 0.34);   /* door width  ~34% of cell */
+        const dh = Math.round(CELL * 0.62);   /* door height ~62% of cell */
+        const dx = px + Math.round((CELL - dw) / 2);
+        const dy = py + Math.round((CELL - dh) / 2);
+        /* Wood fill */
+        ctx.fillStyle = "#3d1f00";
+        ctx.fillRect(dx, dy, dw, dh);
+        /* Door frame */
+        ctx.strokeStyle = "#cc7722";
+        ctx.lineWidth   = 1;
+        ctx.strokeRect(dx + 0.5, dy + 0.5, dw - 1, dh - 1);
+        /* Handle — small dot on the right-centre */
+        ctx.fillStyle = "#ffcc44";
+        ctx.beginPath();
+        ctx.arc(dx + dw - 3, dy + Math.round(dh / 2), 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
