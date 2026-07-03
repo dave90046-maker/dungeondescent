@@ -225,11 +225,10 @@
 
 <footer>
   <button class="btn inline" onclick="saveSession()">💾 SAVE</button>
-  <button class="btn inline amber" id="btn-sync" onclick="syncToIndex()">⟳ SYNC → index.html</button>
+  <button class="btn inline amber" onclick="pushToGame()">▶ PUSH TO GAME</button>
   <button class="btn inline" onclick="doExport()">EXPORT JS ▶</button>
   <button class="btn inline" onclick="doImport()">◀ IMPORT JS</button>
   <div id="foot-status"></div>
-  <span id="sync-target" style="color:var(--line);font-size:0.72rem;margin-left:4px"></span>
   <div id="cursor-info"></div>
 </footer>
 
@@ -739,56 +738,18 @@ function doLoad() {
 }
 
 /* ════════════════════════════════════════════════════
-   DIRECT FILE SYNC  (File System Access API — Chrome/Edge)
-   ════════════════════════════════════════════════════ */
-let indexFileHandle = null;
-
-async function syncToIndex() {
-  if (!('showOpenFilePicker' in window)) {
-    setFoot("Browser doesn't support direct file access — use Export JS instead.", true);
-    return;
-  }
+   PUSH TO GAME  (shared localStorage — same domain)
+   ════════════════════════════════════════════════════
+   Writes the current levels into localStorage under the key
+   dd_custom_levels.  index.html reads that key at startup and
+   uses it instead of its hardcoded LEVELS constant.
+*/
+function pushToGame() {
   try {
-    /* First call: open file picker; subsequent calls reuse the handle */
-    if (!indexFileHandle) {
-      const picks = await window.showOpenFilePicker({
-        types: [{ description: 'HTML files', accept: { 'text/html': ['.html'] } }],
-        multiple: false,
-        mode: 'readwrite',
-      });
-      indexFileHandle = picks[0];
-      document.getElementById("sync-target").textContent = "→ " + indexFileHandle.name;
-    }
-
-    /* Read current file content */
-    const file     = await indexFileHandle.getFile();
-    const original = await file.text();
-
-    /* Replace the LEVELS block — match from `const LEVELS = [` to the
-       closing `];` that appears at the start of its own line */
-    const updated = original.replace(
-      /const LEVELS\s*=\s*\[[\s\S]*?^\];/m,
-      buildExport()
-    );
-
-    if (updated === original) {
-      setFoot('Couldn\'t find a "const LEVELS" block in that file — pick the right one.', true);
-      indexFileHandle = null;
-      document.getElementById("sync-target").textContent = "";
-      return;
-    }
-
-    /* Write back */
-    const writable = await indexFileHandle.createWritable();
-    await writable.write(updated);
-    await writable.close();
-
-    setFoot(levels.length + ' level(s) written to ' + indexFileHandle.name + ' ✓', false);
+    localStorage.setItem("dd_custom_levels", JSON.stringify(levels));
+    setFoot(levels.length + " level(s) pushed — refresh index.html to load them ✓", false);
   } catch(e) {
-    if (e.name === 'AbortError') return;   /* user cancelled picker */
-    setFoot('Sync failed: ' + e.message, true);
-    indexFileHandle = null;
-    document.getElementById("sync-target").textContent = "";
+    setFoot("Push failed: " + e.message, true);
   }
 }
 
