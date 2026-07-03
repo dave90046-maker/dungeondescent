@@ -505,6 +505,22 @@ const LEVELS = [
 
 ];
 
+/* Override LEVELS with any maps pushed from the map editor.
+   map-editor.html writes dd_custom_levels to localStorage (same domain),
+   so a refresh here picks them up immediately. */
+(function() {
+  try {
+    const raw = localStorage.getItem("dd_custom_levels");
+    if (raw) {
+      const custom = JSON.parse(raw);
+      if (Array.isArray(custom) && custom.length) {
+        LEVELS.length = 0;
+        custom.forEach(l => LEVELS.push(l));
+      }
+    }
+  } catch(e) { /* malformed data — ignore, keep hardcoded levels */ }
+})();
+
 /* ════════════════════════════════════════════════════════════
    PLAYER STATE
    ════════════════════════════════════════════════════════════
