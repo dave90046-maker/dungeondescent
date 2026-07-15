@@ -745,6 +745,10 @@ function doLoad() {
    uses it instead of its hardcoded LEVELS constant.
 */
 function pushToGame() {
+  if (!levels[0].entryFromAbove) {
+    setFoot("⚠ Level 1 needs an Entry ↓ (spawn point) before pushing — set one in the right panel.", true);
+    return;
+  }
   try {
     localStorage.setItem("dd_custom_levels", JSON.stringify(levels));
     setFoot(levels.length + " level(s) pushed — refresh index.html to load them ✓", false);
