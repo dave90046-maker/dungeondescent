@@ -601,13 +601,6 @@ function buildDepthRects() {
   }
 }
 
-/* ── Shading helper — green-only palette ──────────────────
-   wallStrokeGreen(d): line brightness at depth d.
-     Starts at full green (#00ff00) at d=0 and dims exponentially.
-*/
-function wallStrokeGreen(depth) {
-  return Math.max(0x18, Math.round(0xff * Math.pow(0.62, depth)));
-}
 
 function getTile(col, row) {
   const map = LEVELS[player.level].map;
@@ -647,70 +640,116 @@ function drawStairGlyph(rect, stairType) {
 
 function render() {
   buildDepthRects();
-  const S = canvas.width;
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, S, S);
+  const S  = canvas.width;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, S, S);
 
   const fd = DIRECTIONS[player.dir];
   const rd = DIRECTIONS[(player.dir + 1) % 4];
 
-  /* Outermost frame — the player's immediate tile boundary */
-  const n0 = depthRects[0];
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = `rgb(0,${wallStrokeGreen(0)},0)`;
-  ctx.beginPath(); ctx.rect(n0.x1, n0.y1, n0.x2 - n0.x1, n0.y2 - n0.y1); ctx.stroke();
-  ctx.lineWidth = 1.5;
-
-  /* Front-to-back loop: break as soon as a wall closes the view so lines
-     never bleed through solid stone (critical for wireframe — no fills
-     to occlude them). */
+  /* Find how far ahead the view reaches before hitting a wall */
+  let innerDepth    = VIEW_DEPTH;
+  let wallAheadType = null;
   for (let d = 0; d < VIEW_DEPTH; d++) {
     const tx = player.x + fd.dx * d, ty = player.y + fd.dy * d;
-    const near = depthRects[d], far = depthRects[d + 1];
-
-    ctx.strokeStyle = `rgb(0,${wallStrokeGreen(d)},0)`;
-
-    /* ── Left side wall: one closing vertical line ── */
-    if (isWall(tx - rd.dx, ty - rd.dy)) {
-      ctx.beginPath();
-      ctx.moveTo(near.x1, near.y1); ctx.lineTo(near.x1, near.y2);
-      ctx.stroke();
-    }
-
-    /* ── Right side wall: one closing vertical line ── */
-    if (isWall(tx + rd.dx, ty + rd.dy)) {
-      ctx.beginPath();
-      ctx.moveTo(near.x2, near.y1); ctx.lineTo(near.x2, near.y2);
-      ctx.stroke();
-    }
-
-    /* ── 4 perspective lines (always — they are the wall face edges too) ── */
-    ctx.beginPath();
-    ctx.moveTo(near.x1, near.y1); ctx.lineTo(far.x1, far.y1);
-    ctx.moveTo(near.x2, near.y1); ctx.lineTo(far.x2, far.y1);
-    ctx.moveTo(near.x1, near.y2); ctx.lineTo(far.x1, far.y2);
-    ctx.moveTo(near.x2, near.y2); ctx.lineTo(far.x2, far.y2);
-    ctx.stroke();
-
-    /* ── Far-depth boundary rectangle ── */
-    ctx.beginPath(); ctx.rect(far.x1, far.y1, far.x2 - far.x1, far.y2 - far.y1); ctx.stroke();
-
-    /* ── Front face at (tx+fd, ty+fd) ── */
     const ft = getTile(tx + fd.dx, ty + fd.dy);
-    if (ft === TILE_WALL) {
-      /* Horizontal hatch lines inside the far rect to read as solid stone */
-      const fh = far.y2 - far.y1;
-      const N  = Math.max(2, Math.round(fh / 14));
-      ctx.beginPath();
-      for (let i = 1; i <= N; i++) {
-        const lineY = far.y1 + fh * i / (N + 1);
-        ctx.moveTo(far.x1 + 1, lineY); ctx.lineTo(far.x2 - 1, lineY);
-      }
-      ctx.stroke();
-      break;   /* nothing behind a wall */
-    } else if (ft === TILE_STAIR_DOWN || ft === TILE_STAIR_UP) {
-      drawStairGlyph(far, ft);
-      break;   /* stairs fill the view */
+    if (ft === TILE_WALL || ft === TILE_STAIR_DOWN || ft === TILE_STAIR_UP) {
+      innerDepth    = d + 1;
+      wallAheadType = ft;
+      break;
     }
+  }
+
+  const inner = depthRects[innerDepth]; /* innermost visible frame  */
+  const d1    = depthRects[1];          /* first-step frame (near-panel boundary) */
+
+  /* ── Colors ── */
+  const C_BG  = "#001a00"; /* ceiling / floor  */
+  const C_FAR = "#007700"; /* far/mid walls    */
+  const C_NR  = "#009900"; /* near wall panels */
+  const C_OUT = "#00ff00"; /* outlines         */
+
+  function poly(pts, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath(); ctx.fill();
+  }
+  function sideWall(d, left) {
+    const tx = player.x + fd.dx * d, ty = player.y + fd.dy * d;
+    return left ? isWall(tx - rd.dx, ty - rd.dy) : isWall(tx + rd.dx, ty + rd.dy);
+  }
+
+  /* ════ FILLS — painter's algorithm (back → front) ════ */
+
+  /* 1. Back wall or stair glyph */
+  if (wallAheadType === TILE_WALL) {
+    poly([[inner.x1,inner.y1],[inner.x2,inner.y1],
+          [inner.x2,inner.y2],[inner.x1,inner.y2]], C_FAR);
+  } else if (wallAheadType === TILE_STAIR_DOWN || wallAheadType === TILE_STAIR_UP) {
+    drawStairGlyph(inner, wallAheadType);
+  }
+
+  /* 2. Ceiling trapezoid: canvas top → inner frame top */
+  poly([[0,0],[S,0],[inner.x2,inner.y1],[inner.x1,inner.y1]], C_BG);
+
+  /* 3. Floor trapezoid: canvas bottom → inner frame bottom */
+  poly([[0,S],[inner.x1,inner.y2],[inner.x2,inner.y2],[S,S]], C_BG);
+
+  /* 4. Perspective side walls at depth 1+ (back-to-front, painted over ceiling/floor) */
+  for (let d = innerDepth - 1; d >= 1; d--) {
+    const nr = depthRects[d], fr = depthRects[d + 1];
+    if (sideWall(d, true))
+      poly([[nr.x1,nr.y1],[fr.x1,fr.y1],[fr.x1,fr.y2],[nr.x1,nr.y2]], C_FAR);
+    if (sideWall(d, false))
+      poly([[nr.x2,nr.y1],[nr.x2,nr.y2],[fr.x2,fr.y2],[fr.x2,fr.y1]], C_FAR);
+  }
+
+  /* 5. Near wall panels: wall immediately beside the player */
+  if (sideWall(0, true))
+    poly([[0,0],[d1.x1,d1.y1],[d1.x1,d1.y2],[0,S]],       C_NR);
+  if (sideWall(0, false))
+    poly([[S,0],[S,S],[d1.x2,d1.y2],[d1.x2,d1.y1]], C_NR);
+
+  /* ════ OUTLINES ════ */
+  ctx.strokeStyle = C_OUT; ctx.lineWidth = 1.5;
+
+  /* Diagonal perspective lines: canvas corners → d1 corners */
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(d1.x1, d1.y1);
+  ctx.moveTo(0, S); ctx.lineTo(d1.x1, d1.y2);
+  ctx.moveTo(S, 0); ctx.lineTo(d1.x2, d1.y1);
+  ctx.moveTo(S, S); ctx.lineTo(d1.x2, d1.y2);
+  ctx.stroke();
+
+  /* d1 frame rectangle (near-panel inner boundary) */
+  ctx.beginPath();
+  ctx.rect(d1.x1, d1.y1, d1.x2 - d1.x1, d1.y2 - d1.y1);
+  ctx.stroke();
+
+  /* Corridor tube: 4 perspective edges from d1 → inner */
+  if (innerDepth > 1) {
+    ctx.beginPath();
+    ctx.moveTo(d1.x1, d1.y1); ctx.lineTo(inner.x1, inner.y1);
+    ctx.moveTo(d1.x2, d1.y1); ctx.lineTo(inner.x2, inner.y1);
+    ctx.moveTo(d1.x1, d1.y2); ctx.lineTo(inner.x1, inner.y2);
+    ctx.moveTo(d1.x2, d1.y2); ctx.lineTo(inner.x2, inner.y2);
+    ctx.stroke();
+  }
+
+  /* Inner frame outline */
+  ctx.beginPath();
+  ctx.rect(inner.x1, inner.y1, inner.x2 - inner.x1, inner.y2 - inner.y1);
+  ctx.stroke();
+
+  /* Vertical side lines at intermediate depth frames (side-wall panel edges) */
+  for (let d = 2; d < innerDepth; d++) {
+    const r = depthRects[d];
+    ctx.beginPath();
+    ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x1, r.y2);
+    ctx.moveTo(r.x2, r.y1); ctx.lineTo(r.x2, r.y2);
+    ctx.stroke();
   }
 
   updateStatus();
