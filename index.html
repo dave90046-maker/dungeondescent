@@ -660,97 +660,66 @@ function render() {
     }
   }
 
-  const inner = depthRects[innerDepth]; /* innermost visible frame  */
-  const d1    = depthRects[1];          /* first-step frame (near-panel boundary) */
+  const inner = depthRects[innerDepth];
+  const d1    = depthRects[1];
 
-  /* ── Colors ── */
   const C_BG  = "#001a00"; /* ceiling / floor  */
   const C_FAR = "#007700"; /* far/mid walls    */
   const C_NR  = "#009900"; /* near wall panels */
   const C_OUT = "#00ff00"; /* outlines         */
 
-  function poly(pts, color) {
-    ctx.fillStyle = color;
+  /* Fill a polygon and immediately stroke its outline */
+  function panel(pts, fill) {
+    ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    ctx.closePath(); ctx.fill();
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = C_OUT; ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
+
   function sideWall(d, left) {
     const tx = player.x + fd.dx * d, ty = player.y + fd.dy * d;
     return left ? isWall(tx - rd.dx, ty - rd.dy) : isWall(tx + rd.dx, ty + rd.dy);
   }
 
+  const leftNear  = sideWall(0, true);
+  const rightNear = sideWall(0, false);
+
   /* ════ FILLS — painter's algorithm (back → front) ════ */
 
-  /* 1. Back wall or stair glyph */
+  /* 1. Back wall / stair glyph */
   if (wallAheadType === TILE_WALL) {
-    poly([[inner.x1,inner.y1],[inner.x2,inner.y1],
-          [inner.x2,inner.y2],[inner.x1,inner.y2]], C_FAR);
+    panel([[inner.x1,inner.y1],[inner.x2,inner.y1],
+           [inner.x2,inner.y2],[inner.x1,inner.y2]], C_FAR);
   } else if (wallAheadType === TILE_STAIR_DOWN || wallAheadType === TILE_STAIR_UP) {
     drawStairGlyph(inner, wallAheadType);
   }
 
-  /* 2. Ceiling trapezoid: canvas top → inner frame top */
-  poly([[0,0],[S,0],[inner.x2,inner.y1],[inner.x1,inner.y1]], C_BG);
+  /* 2. Ceiling: full-width trapezoid (canvas top → inner frame top) */
+  panel([[0,0],[S,0],[inner.x2,inner.y1],[inner.x1,inner.y1]], C_BG);
 
-  /* 3. Floor trapezoid: canvas bottom → inner frame bottom */
-  poly([[0,S],[inner.x1,inner.y2],[inner.x2,inner.y2],[S,S]], C_BG);
+  /* 3. Floor: full-width trapezoid (canvas bottom → inner frame bottom) */
+  panel([[0,S],[inner.x1,inner.y2],[inner.x2,inner.y2],[S,S]], C_BG);
 
-  /* 4. Perspective side walls at depth 1+ (back-to-front, painted over ceiling/floor) */
+  /* 4. Perspective side walls depth 1+ (back-to-front) */
   for (let d = innerDepth - 1; d >= 1; d--) {
     const nr = depthRects[d], fr = depthRects[d + 1];
     if (sideWall(d, true))
-      poly([[nr.x1,nr.y1],[fr.x1,fr.y1],[fr.x1,fr.y2],[nr.x1,nr.y2]], C_FAR);
+      panel([[nr.x1,nr.y1],[fr.x1,fr.y1],[fr.x1,fr.y2],[nr.x1,nr.y2]], C_FAR);
     if (sideWall(d, false))
-      poly([[nr.x2,nr.y1],[nr.x2,nr.y2],[fr.x2,fr.y2],[fr.x2,fr.y1]], C_FAR);
+      panel([[nr.x2,nr.y1],[nr.x2,nr.y2],[fr.x2,fr.y2],[fr.x2,fr.y1]], C_FAR);
   }
 
-  /* 5. Near wall panels: wall immediately beside the player */
-  if (sideWall(0, true))
-    poly([[0,0],[d1.x1,d1.y1],[d1.x1,d1.y2],[0,S]],       C_NR);
-  if (sideWall(0, false))
-    poly([[S,0],[S,S],[d1.x2,d1.y2],[d1.x2,d1.y1]], C_NR);
-
-  /* ════ OUTLINES ════ */
-  ctx.strokeStyle = C_OUT; ctx.lineWidth = 1.5;
-
-  /* Diagonal perspective lines: canvas corners → d1 corners */
-  ctx.beginPath();
-  ctx.moveTo(0, 0); ctx.lineTo(d1.x1, d1.y1);
-  ctx.moveTo(0, S); ctx.lineTo(d1.x1, d1.y2);
-  ctx.moveTo(S, 0); ctx.lineTo(d1.x2, d1.y1);
-  ctx.moveTo(S, S); ctx.lineTo(d1.x2, d1.y2);
-  ctx.stroke();
-
-  /* d1 frame rectangle (near-panel inner boundary) */
-  ctx.beginPath();
-  ctx.rect(d1.x1, d1.y1, d1.x2 - d1.x1, d1.y2 - d1.y1);
-  ctx.stroke();
-
-  /* Corridor tube: 4 perspective edges from d1 → inner */
-  if (innerDepth > 1) {
-    ctx.beginPath();
-    ctx.moveTo(d1.x1, d1.y1); ctx.lineTo(inner.x1, inner.y1);
-    ctx.moveTo(d1.x2, d1.y1); ctx.lineTo(inner.x2, inner.y1);
-    ctx.moveTo(d1.x1, d1.y2); ctx.lineTo(inner.x1, inner.y2);
-    ctx.moveTo(d1.x2, d1.y2); ctx.lineTo(inner.x2, inner.y2);
-    ctx.stroke();
-  }
-
-  /* Inner frame outline */
-  ctx.beginPath();
-  ctx.rect(inner.x1, inner.y1, inner.x2 - inner.x1, inner.y2 - inner.y1);
-  ctx.stroke();
-
-  /* Vertical side lines at intermediate depth frames (side-wall panel edges) */
-  for (let d = 2; d < innerDepth; d++) {
-    const r = depthRects[d];
-    ctx.beginPath();
-    ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x1, r.y2);
-    ctx.moveTo(r.x2, r.y1); ctx.lineTo(r.x2, r.y2);
-    ctx.stroke();
-  }
+  /* 5. Near panels: FLAT full-height rectangles (y=0..S, not d1.y1..d1.y2).
+        Drawn last so they cover the ceiling/floor corners cleanly.
+        Outlines are implicit via panel() — right edge of left panel and left
+        edge of right panel only appear when the panel is actually drawn,
+        so an open side produces no phantom outline. */
+  if (leftNear)  panel([[0,0],[d1.x1,0],[d1.x1,S],[0,S]], C_NR);
+  if (rightNear) panel([[d1.x2,0],[S,0],[S,S],[d1.x2,S]], C_NR);
 
   updateStatus();
   updateStairButton();
